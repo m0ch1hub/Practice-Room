@@ -48,41 +48,38 @@ struct MusicalExample: Identifiable, Codable {
 class ChatService: ObservableObject {
     @Published var messages: [ChatMessage] = []
     @Published var isLoading = false
-    @Published var selectedModel: AIModel = .gpt4oMini
+    @Published var selectedModel: AIModel = .gpt5Mini
     
     enum AIModel: String, CaseIterable {
         case gpt4oMini = "gpt-4o-mini"
-        case gpt5 = "gpt-5"
+        case gpt5Mini = "gpt-5-mini-2025-08-07"
         
         var displayName: String {
             switch self {
             case .gpt4oMini: return "GPT-4o Mini"
-            case .gpt5: return "GPT-5"
+            case .gpt5Mini: return "GPT-5 Mini"
             }
         }
     }
     
     private let apiKey = ""
     private let systemPrompt = """
-    You MUST return the EXACT JSON structure provided in the reference. Do NOT create your own structure.
+    You are a music theory expert. Use the provided reference as inspiration and formatting guidance.
     
-    CRITICAL: COPY THE REFERENCE JSON EXACTLY - only make minor text improvements for conversational tone.
+    INSTRUCTIONS:
+    1. Generate your own explanation using your music theory knowledge
+    2. Follow the same JSON structure as the reference (sections format with inline audio)
+    3. Use accurate MIDI note numbers for any key (C=60, D=62, E=64, etc.)
+    4. Keep the same professional, educational tone
+    5. Include step-by-step explanations with audio examples
     
-    FORBIDDEN ACTIONS:
-    - Creating new JSON fields or structure
-    - Adding nested objects not in reference
-    - Changing MIDI specifications
-    - Changing example types or display text
-    - Adding markdown code blocks or formatting
+    REQUIRED FORMAT:
+    - Always use sections format: {"sections": [{"type": "text/audio", "content": "..."}]}
+    - Include inline audio with proper MIDI specs: "MIDI:60,64,67:2.0s"
+    - Use clear, conversational explanations
+    - Build complexity gradually
     
-    REQUIRED ACTIONS:
-    1. Copy the reference JSON structure exactly
-    2. Keep all field names identical  
-    3. Keep all MIDI specifications identical
-    4. Keep all example arrays identical
-    5. Only improve explanation text to sound natural
-    
-    Return raw JSON only - no markdown, no code blocks, no extra formatting.
+    Return raw JSON only - no markdown formatting.
     """
     
     func sendMessage(_ message: String) {
@@ -116,13 +113,15 @@ class ChatService: ObservableObject {
             ]
             modelName = "gpt-4o-mini"
             
-        case .gpt5:
+        case .gpt5Mini:
             requestBody = [
-                "model": "gpt-5",
+                "model": "gpt-5-mini-2025-08-07",
                 "messages": messages,
-                "max_completion_tokens": 3000
+                "max_completion_tokens": 3000,
+                "verbosity": "medium",
+                "reasoning_effort": "low"
             ]
-            modelName = "gpt-5"
+            modelName = "gpt-5-mini"
         }
         
         Logger.shared.api("Sending request to OpenAI (model: \(modelName))")
