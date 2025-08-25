@@ -5,10 +5,13 @@ struct ChatView: View {
     @StateObject private var soundEngine = SoundEngine.shared
     @State private var messageText = ""
     @FocusState private var isTextFieldFocused: Bool
+    @State private var pianoHighlightedNotes: [Int] = []
+    @State private var isPianoVisible = false
     
     var body: some View {
-        VStack(spacing: 0) {
-            // Header
+        ZStack {
+            VStack(spacing: 0) {
+                // Header
             HStack {
                 Button(action: {}) {
                     Image(systemName: "line.horizontal.3")
@@ -136,6 +139,15 @@ struct ChatView: View {
                 .padding(.bottom, 20)
             }
             .background(Color.white)
+            }
+            
+            VStack {
+                Spacer()
+                PianoKeyboardView(
+                    highlightedNotes: pianoHighlightedNotes,
+                    isVisible: isPianoVisible
+                )
+            }
         }
         .background(Color.white)
     }
@@ -150,6 +162,11 @@ struct ChatView: View {
     
     private func playExample(_ example: MusicalExample) {
         Logger.shared.ui("Playing example: \(example.type.rawValue) - \(example.content)")
+        
+        // Extract MIDI notes and show piano
+        if let midiNotes = extractMIDIFromExample(example) {
+            showPianoWithNotes(midiNotes)
+        }
         
         switch example.type {
         case .chordProgression, .sequence:
@@ -284,6 +301,34 @@ struct PlayButton: View {
         }
         .scaleEffect(isPlaying ? 1.02 : 1.0)
         .animation(.easeInOut(duration: 0.2), value: isPlaying)
+    }
+}
+
+extension ChatView {
+    private func extractMIDIFromExample(_ example: MusicalExample) -> [Int]? {
+        let content = example.content
+        
+        // Handle MIDI: format
+        if content.hasPrefix("MIDI:") {
+            let midiPart = content.replacingOccurrences(of: "MIDI:", with: "")
+                .components(separatedBy: ":").first ?? ""
+            let noteStrings = midiPart.components(separatedBy: ",")
+            return noteStrings.compactMap { Int($0.trimmingCharacters(in: .whitespacesAndNewlines)) }
+                .map { $0 % 12 } // Convert to 0-11 range for piano display
+        }
+        
+        return nil
+    }
+    
+    private func showPianoWithNotes(_ midiNotes: [Int]) {
+        pianoHighlightedNotes = midiNotes
+        isPianoVisible = true
+        
+        // Hide piano after audio finishes
+        DispatchQueue.main.asyncAfter(deadline: .now() + 3) {
+            isPianoVisible = false
+            pianoHighlightedNotes = []
+        }
     }
 }
 
