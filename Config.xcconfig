@@ -1,4 +1,0 @@
-// Configuration to handle project name with colon
-PRODUCT_MODULE_NAME = Practice_Room_Chat
-MODULE_NAME = Practice_Room_Chat
-SWIFT_MODULE_NAME = Practice_Room_Chat

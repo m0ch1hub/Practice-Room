@@ -48,161 +48,128 @@ struct MusicalExample: Identifiable, Codable {
 class ChatService: ObservableObject {
     @Published var messages: [ChatMessage] = []
     @Published var isLoading = false
-    @Published var selectedModel: AIModel = .gpt5Mini
+    @Published var selectedModel: AIModel = .tunedModel
+    
+    private let authService: ServiceAccountAuth
+    
+    init(authService: ServiceAccountAuth) {
+        self.authService = authService
+    }
     
     enum AIModel: String, CaseIterable {
-        case gpt4oMini = "gpt-4o-mini"
-        case gpt5Mini = "gpt-5-mini-2025-08-07"
+        case tunedModel = "tuned-model"
         
         var displayName: String {
             switch self {
-            case .gpt4oMini: return "GPT-4o Mini"
-            case .gpt5Mini: return "GPT-5 Mini"
+            case .tunedModel: return "Music Theory AI"
             }
         }
     }
     
-    private let apiKey = ""
-    private let systemPrompt = """
-    You are a music theory expert. Use the provided reference as inspiration and formatting guidance.
+    private let googleCloudApiKey: String = {
+        guard let path = Bundle.main.path(forResource: "Config", ofType: "xcconfig"),
+              let config = NSDictionary(contentsOfFile: path),
+              let apiKey = config["GOOGLE_CLOUD_API_KEY"] as? String else {
+            return "YOUR_GOOGLE_CLOUD_API_KEY"
+        }
+        return apiKey
+    }()
     
-    INSTRUCTIONS:
-    1. Generate your own explanation using your music theory knowledge
-    2. Follow the same JSON structure as the reference (sections format with inline audio)
-    3. Use accurate MIDI note numbers for any key (C=60, D=62, E=64, etc.)
-    4. Keep the same professional, educational tone
-    5. Include step-by-step explanations with audio examples
+    private let projectId = "1078751798332"
+    private let location = "us-central1"
     
-    REQUIRED FORMAT:
-    - Always use sections format: {"sections": [{"type": "text/audio", "content": "..."}]}
-    - Include inline audio with proper MIDI specs: "MIDI:60,64,67:2.0s"
-    - Use clear, conversational explanations
-    - Build complexity gradually
+    private let endpointId = "5817141089097744384"
     
-    Return raw JSON only - no markdown formatting.
-    """
     
     func sendMessage(_ message: String) {
-        // Use the new RAG-enabled method instead of direct API calls
-        sendMessageWithRAG(message)
-    }
-    
-    func callOpenAI(message: String) async throws -> ChatMessage {
-        let url = URL(string: "https://api.openai.com/v1/chat/completions")!
-        var request = URLRequest(url: url)
-        request.httpMethod = "POST"
-        request.setValue("Bearer \(apiKey)", forHTTPHeaderField: "Authorization")
-        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        let userMessage = ChatMessage(role: "user", content: message, examples: [])
+        messages.append(userMessage)
+        isLoading = true
         
-        let messages = [
-            ["role": "system", "content": systemPrompt],
-            ["role": "user", "content": message]
-        ]
-        
-        // Configure request based on selected model
-        let requestBody: [String: Any]
-        let modelName: String
-        
-        switch selectedModel {
-        case .gpt4oMini:
-            requestBody = [
-                "model": "gpt-4o-mini",
-                "messages": messages,
-                "max_tokens": 800,
-                "temperature": 0.3
-            ]
-            modelName = "gpt-4o-mini"
-            
-        case .gpt5Mini:
-            requestBody = [
-                "model": "gpt-5-mini-2025-08-07",
-                "messages": messages,
-                "max_completion_tokens": 3000,
-                "verbosity": "medium",
-                "reasoning_effort": "low"
-            ]
-            modelName = "gpt-5-mini"
-        }
-        
-        Logger.shared.api("Sending request to OpenAI (model: \(modelName))")
-        request.httpBody = try JSONSerialization.data(withJSONObject: requestBody)
-        
-        let (data, response) = try await URLSession.shared.data(for: request)
-        
-        if let httpResponse = response as? HTTPURLResponse {
-            Logger.shared.api("OpenAI response status: \(httpResponse.statusCode)")
-            
-            // Log error details for 400 errors
-            if httpResponse.statusCode == 400 {
-                if let errorString = String(data: data, encoding: .utf8) {
-                    Logger.shared.error("OpenAI 400 Error Details: \(errorString)")
+        Task {
+            do {
+                let response = try await callVertexAI(message: message)
+                await MainActor.run {
+                    self.messages.append(response)
+                    self.isLoading = false
+                }
+            } catch {
+                await MainActor.run {
+                    let errorMessage = ChatMessage(
+                        role: "assistant",
+                        content: "Sorry, I encountered an error. Please try again.",
+                        examples: []
+                    )
+                    self.messages.append(errorMessage)
+                    self.isLoading = false
                 }
             }
-            
-            // Log all response data for debugging GPT-5
-            if let responseString = String(data: data, encoding: .utf8) {
-                Logger.shared.api("GPT-5 Raw Response: \(responseString)")
-            }
         }
+    }
+    
+    func callVertexAI(message: String) async throws -> ChatMessage {
+        let accessToken = try await authService.getAccessToken()
+        
+        let urlString = "https://us-central1-aiplatform.googleapis.com/v1/projects/\(projectId)/locations/\(location)/endpoints/\(endpointId):generateContent"
+        let url = URL(string: urlString)!
+        
+        var request = URLRequest(url: url)
+        request.httpMethod = "POST"
+        request.setValue("Bearer \(accessToken)", forHTTPHeaderField: "Authorization")
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        
+        let requestBody: [String: Any] = [
+            "contents": [[
+                "role": "user",
+                "parts": [
+                    ["text": message]
+                ]
+            ]],
+            "generation_config": [
+                "temperature": 0.7,
+                "topP": 1,
+                "topK": 32,
+                "maxOutputTokens": 2048
+            ]
+        ]
+        
+        request.httpBody = try JSONSerialization.data(withJSONObject: requestBody)
+        let (data, response) = try await URLSession.shared.data(for: request)
         
         if let json = try JSONSerialization.jsonObject(with: data) as? [String: Any],
-           let choices = json["choices"] as? [[String: Any]],
-           let firstChoice = choices.first,
-           let message = firstChoice["message"] as? [String: Any],
-           let content = message["content"] as? String {
+           let candidates = json["candidates"] as? [[String: Any]],
+           let firstCandidate = candidates.first,
+           let content = firstCandidate["content"] as? [String: Any],
+           let parts = content["parts"] as? [[String: Any]],
+           let firstPart = parts.first,
+           let text = firstPart["text"] as? String {
             
-            let (explanation, examples) = parseStructuredResponse(content)
-            
-            Logger.shared.api("Response parsed successfully - Content length: \(explanation.count) chars, Examples: \(examples.count)")
-            
+            let (explanation, examples) = parseStructuredResponse(text)
             return ChatMessage(role: "assistant", content: explanation, examples: examples)
         }
         
-        Logger.shared.error("Failed to parse OpenAI response")
         throw NSError(domain: "ChatService", code: 0, userInfo: [NSLocalizedDescriptionKey: "Failed to parse response"])
     }
     
     private func parseStructuredResponse(_ content: String) -> (explanation: String, examples: [MusicalExample]) {
-        Logger.shared.info("🎯 STRUCTURED PARSING: Processing JSON response")
-        
-        // Parse as JSON - no fallbacks
-        guard let jsonData = content.data(using: .utf8),
-              let jsonResponse = try? JSONSerialization.jsonObject(with: jsonData) as? [String: Any] else {
-            Logger.shared.error("🎯 STRUCTURED PARSING: Failed to parse JSON response - no fallbacks")
-            return ("Error: Invalid response format", [])
-        }
-        
-        // Check for new sections-based format
-        if let sectionsArray = jsonResponse["sections"] as? [[String: Any]] {
-            return parseSectionsFormat(sectionsArray)
-        }
-        
-        // Fall back to old format
-        guard let explanation = jsonResponse["explanation"] as? String,
-              let examplesArray = jsonResponse["examples"] as? [[String: Any]] else {
-            Logger.shared.error("🎯 STRUCTURED PARSING: Invalid JSON structure - no fallbacks")
-            return ("Error: Invalid response format", [])
-        }
-        
-        let examples = examplesArray.compactMap { exampleDict -> MusicalExample? in
-            guard let typeString = exampleDict["type"] as? String,
-                  let type = MusicalExample.ExampleType(rawValue: typeString),
-                  let content = exampleDict["content"] as? String,
-                  let displayText = exampleDict["displayText"] as? String else {
-                return nil
+        if let jsonData = content.data(using: .utf8),
+           let jsonResponse = try? JSONSerialization.jsonObject(with: jsonData) as? [String: Any] {
+            
+            if let sectionsArray = jsonResponse["sections"] as? [[String: Any]] {
+                return parseSectionsFormat(sectionsArray)
             }
             
-            let instruction = exampleDict["instruction"] as? String
-            return MusicalExample(
-                type: type,
-                content: content,
-                displayText: displayText,
-                instruction: instruction
-            )
+            if let explanation = jsonResponse["explanation"] as? String {
+                let examples = parseExamplesFromJSON(jsonResponse["examples"])
+                return (explanation, examples)
+            }
+            
+            if let text = jsonResponse["text"] as? String {
+                return extractExamplesFromText(text)
+            }
         }
         
-        Logger.shared.info("🎼 STRUCTURED PARSING: Found \(examples.count) structured examples")
-        return (explanation, examples)
+        return extractExamplesFromText(content)
     }
     
     private func parseSectionsFormat(_ sectionsArray: [[String: Any]]) -> (explanation: String, examples: [MusicalExample]) {
@@ -249,7 +216,6 @@ class ChatService: ObservableObject {
         }
         
         let fullExplanation = interleaved.joined(separator: "\n\n")
-        Logger.shared.info("🎼 SECTIONS PARSING: Found \(examples.count) interleaved examples")
         return (fullExplanation, examples)
     }
     
@@ -277,6 +243,145 @@ class ChatService: ObservableObject {
         }
         
         return processedText
+    }
+    
+    private func parseExamplesFromJSON(_ examplesData: Any?) -> [MusicalExample] {
+        guard let examplesArray = examplesData as? [[String: Any]] else {
+            return []
+        }
+        
+        var examples: [MusicalExample] = []
+        for exampleDict in examplesArray {
+            if let content = exampleDict["content"] as? String,
+               let displayText = exampleDict["displayText"] as? String {
+                
+                let type: MusicalExample.ExampleType
+                if let typeString = exampleDict["type"] as? String,
+                   let parsedType = MusicalExample.ExampleType(rawValue: typeString) {
+                    type = parsedType
+                } else {
+                    // Infer type from content
+                    type = inferExampleType(from: content)
+                }
+                
+                let example = MusicalExample(
+                    type: type,
+                    content: content,
+                    displayText: displayText,
+                    instruction: exampleDict["instruction"] as? String
+                )
+                examples.append(example)
+            }
+        }
+        return examples
+    }
+    
+    private func extractExamplesFromText(_ text: String) -> (explanation: String, examples: [MusicalExample]) {
+        var processedText = text
+        var examples: [MusicalExample] = []
+        
+        // Look for MIDI patterns in the text
+        let midiPattern = "MIDI:([0-9,]+)(?::([0-9.]+s))?"
+        let regex = try! NSRegularExpression(pattern: midiPattern, options: [])
+        let matches = regex.matches(in: text, options: [], range: NSRange(text.startIndex..<text.endIndex, in: text))
+        
+        // Process matches in reverse order to maintain string indices
+        for match in matches.reversed() {
+            if let midiRange = Range(match.range(at: 1), in: text) {
+                let midiNotes = String(text[midiRange])
+                let duration = match.range(at: 2).location != NSNotFound ? 
+                    String(text[Range(match.range(at: 2), in: text)!]) : "1.0s"
+                
+                let fullMidiContent = "MIDI:\(midiNotes):\(duration)"
+                let displayText = generateDisplayText(from: midiNotes)
+                let type = inferExampleType(from: midiNotes)
+                
+                let example = MusicalExample(
+                    type: type,
+                    content: fullMidiContent,
+                    displayText: displayText
+                )
+                examples.append(example)
+                
+                // Replace with audio button in text
+                if let fullRange = Range(match.range(at: 0), in: processedText) {
+                    processedText.replaceSubrange(fullRange, with: "[AUDIO:\(fullMidiContent):\(displayText)]")
+                }
+            }
+        }
+        
+        // Look for common chord/scale patterns even without MIDI format
+        let chordPattern = "\\b([A-G][b#]?)\\s+(major|minor|dim|aug)\\b"
+        let chordRegex = try! NSRegularExpression(pattern: chordPattern, options: .caseInsensitive)
+        let chordMatches = chordRegex.matches(in: text, options: [], range: NSRange(text.startIndex..<text.endIndex, in: text))
+        
+        for match in chordMatches {
+            if match.numberOfRanges >= 3,
+               let rootRange = Range(match.range(at: 1), in: text),
+               let typeRange = Range(match.range(at: 2), in: text) {
+                let root = String(text[rootRange])
+                let chordType = String(text[typeRange]).lowercased()
+                
+                if let midiNotes = generateMIDIForChord(root: root, type: chordType) {
+                    let displayText = "\(root) \(chordType.capitalized)"
+                    let example = MusicalExample(
+                        type: chordType == "minor" ? .chord : .chord,
+                        content: "MIDI:\(midiNotes):2.0s",
+                        displayText: "Play \(displayText)"
+                    )
+                    examples.append(example)
+                }
+            }
+        }
+        
+        return (processedText, examples)
+    }
+    
+    private func inferExampleType(from content: String) -> MusicalExample.ExampleType {
+        let noteCount = content.components(separatedBy: ",").count
+        if noteCount >= 8 {
+            return .scale
+        } else if noteCount >= 3 {
+            return .chord
+        } else if noteCount == 2 {
+            return .interval
+        } else {
+            return .note
+        }
+    }
+    
+    private func generateDisplayText(from midiNotes: String) -> String {
+        let noteCount = midiNotes.components(separatedBy: ",").count
+        switch noteCount {
+        case 1:
+            return "Play Note"
+        case 2:
+            return "Play Interval"
+        case 3...4:
+            return "Play Chord"
+        case 5...7:
+            return "Play Progression"
+        default:
+            return "Play Scale"
+        }
+    }
+    
+    private func generateMIDIForChord(root: String, type: String) -> String? {
+        // Basic chord generation - you could expand this
+        let noteMap = ["C": 60, "C#": 61, "Db": 61, "D": 62, "D#": 63, "Eb": 63,
+                      "E": 64, "F": 65, "F#": 66, "Gb": 66, "G": 67, "G#": 68,
+                      "Ab": 68, "A": 69, "A#": 70, "Bb": 70, "B": 71]
+        
+        guard let rootMidi = noteMap[root] else { return nil }
+        
+        switch type {
+        case "major":
+            return "\(rootMidi),\(rootMidi + 4),\(rootMidi + 7)"
+        case "minor":
+            return "\(rootMidi),\(rootMidi + 3),\(rootMidi + 7)"
+        default:
+            return nil
+        }
     }
     
 }

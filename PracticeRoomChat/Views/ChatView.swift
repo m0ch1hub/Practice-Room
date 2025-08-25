@@ -1,7 +1,7 @@
 import SwiftUI
 
 struct ChatView: View {
-    @StateObject private var chatService = ChatService()
+    @StateObject private var chatService = ChatService(authService: ServiceAccountAuth())
     @StateObject private var soundEngine = SoundEngine.shared
     @State private var messageText = ""
     @FocusState private var isTextFieldFocused: Bool
@@ -19,31 +19,29 @@ struct ChatView: View {
                 Spacer()
                 
                 VStack {
-                    Text("ChatGPT")
+                    Text("Practice Room Chat")
                         .font(.title2)
                         .fontWeight(.medium)
                     
-                    // Model selector
-                    Picker("Model", selection: $chatService.selectedModel) {
-                        ForEach(ChatService.AIModel.allCases, id: \.self) { model in
-                            Text(model.displayName)
-                                .tag(model)
-                        }
-                    }
-                    .pickerStyle(SegmentedPickerStyle())
-                    .scaleEffect(0.8)
+                    Text("Fine-tuned Music Theory AI")
+                        .font(.caption)
+                        .foregroundColor(.secondary)
                 }
                 
                 Spacer()
                 
-                Button("Sign up") {
-                    // Sign up action
+                HStack(spacing: 4) {
+                    Image(systemName: "checkmark.circle.fill")
+                        .font(.system(size: 16))
+                        .foregroundColor(.green)
+                    Text("Authenticated")
+                        .font(.system(size: 14, weight: .medium))
+                        .foregroundColor(.secondary)
                 }
-                .padding(.horizontal, 16)
-                .padding(.vertical, 8)
-                .background(Color.black)
-                .foregroundColor(.white)
-                .cornerRadius(20)
+                .padding(.horizontal, 12)
+                .padding(.vertical, 6)
+                .background(Color(.systemGray6))
+                .cornerRadius(16)
             }
             .padding(.horizontal, 20)
             .padding(.vertical, 12)
@@ -147,7 +145,7 @@ struct ChatView: View {
         let message = messageText
         Logger.shared.ui("Sending message from ChatView: '\(message)'")
         messageText = ""
-        chatService.sendMessageWithRAG(message)
+        chatService.sendMessage(message)
     }
     
     private func playExample(_ example: MusicalExample) {
