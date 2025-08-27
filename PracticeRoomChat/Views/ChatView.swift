@@ -1,5 +1,6 @@
 import SwiftUI
 
+// Remove any custom LiquidGlass components
 struct ChatView: View {
     @StateObject private var chatService = ChatService(authService: ServiceAccountAuth())
     @StateObject private var soundEngine = SoundEngine.shared
@@ -7,50 +8,14 @@ struct ChatView: View {
     @FocusState private var isTextFieldFocused: Bool
     
     var body: some View {
-        VStack(spacing: 0) {
-                // Header
-            HStack {
-                Button(action: {}) {
-                    Image(systemName: "line.horizontal.3")
-                        .font(.title2)
-                        .foregroundColor(.primary)
-                }
-                
-                Spacer()
-                
-                VStack {
-                    Text("Practice Room Chat")
-                        .font(.title2)
-                        .fontWeight(.medium)
-                    
-                    Text("Fine-tuned Music Theory AI")
-                        .font(.caption)
-                        .foregroundColor(.secondary)
-                }
-                
-                Spacer()
-                
-                HStack(spacing: 4) {
-                    Image(systemName: "checkmark.circle.fill")
-                        .font(.system(size: 16))
-                        .foregroundColor(.green)
-                    Text("Authenticated")
-                        .font(.system(size: 14, weight: .medium))
-                        .foregroundColor(.secondary)
-                }
-                .padding(.horizontal, 12)
-                .padding(.vertical, 6)
-                .background(Color(.systemGray6))
-                .cornerRadius(16)
-            }
-            .padding(.horizontal, 20)
-            .padding(.vertical, 12)
-            .background(Color.white)
-            
-            // Chat content
+        ZStack {
+            // Chat content - extends full screen
             ScrollViewReader { proxy in
                 ScrollView {
                     LazyVStack(spacing: 20) {
+                        // Top padding to account for header
+                        Color.clear.frame(height: 80)
+                        
                         if chatService.messages.isEmpty {
                             WelcomeView()
                                 .padding(.top, 40)
@@ -68,8 +33,8 @@ struct ChatView: View {
                             LoadingIndicator()
                         }
                         
-                        // Bottom padding for content
-                        Color.clear.frame(height: 100)
+                        // Bottom padding so content can scroll behind control area
+                        Color.clear.frame(height: 90)
                     }
                     .padding(.horizontal, 20)
                 }
@@ -79,22 +44,51 @@ struct ChatView: View {
                     }
                 }
             }
+            .ignoresSafeArea()
             
-            // Bottom input area
-            VStack(spacing: 12) {
-                if chatService.messages.isEmpty {
-                    SuggestionChips()
-                }
-                
-                HStack(spacing: 8) {
+            // Simple header with ultraThinMaterial
+            VStack {
+                HStack {
                     Button(action: {}) {
-                        Image(systemName: "plus")
+                        Image(systemName: "line.horizontal.3")
                             .font(.title2)
-                            .foregroundColor(.gray)
+                            .foregroundColor(.primary)
                     }
                     
-                    HStack {
-                        TextField("Ask anything", text: $messageText)
+                    Spacer()
+                    
+                    Text("Practice Room Chat")
+                        .font(.system(size: 18, weight: .semibold))
+                        .foregroundColor(.primary)
+                    
+                    Spacer()
+                }
+                .padding(.horizontal, 20)
+                .padding(.vertical, 12)
+                .background(.ultraThinMaterial)
+                
+                Spacer()
+            }
+            
+            // Clean iMessage-style bottom bar
+            VStack {
+                Spacer()
+                
+                if chatService.messages.isEmpty {
+                    SuggestionChips()
+                        .padding(.bottom, 8)
+                }
+                
+                // Simple bottom bar with ultraThinMaterial
+                HStack(spacing: 12) {
+                    Button(action: {}) {
+                        Image(systemName: "plus")
+                            .font(.system(size: 24))
+                            .foregroundColor(.primary)
+                    }
+                    
+                    HStack(spacing: 8) {
+                        TextField("Message", text: $messageText)
                             .focused($isTextFieldFocused)
                             .onSubmit {
                                 sendMessage()
@@ -102,42 +96,24 @@ struct ChatView: View {
                         
                         if !messageText.isEmpty {
                             Button(action: sendMessage) {
-                                Image(systemName: "arrow.up")
-                                    .font(.system(size: 16, weight: .medium))
-                                    .foregroundColor(.white)
-                                    .frame(width: 28, height: 28)
-                                    .background(Color.black)
-                                    .clipShape(Circle())
+                                Image(systemName: "arrow.up.circle.fill")
+                                    .font(.system(size: 28))
+                                    .foregroundColor(.blue)
                             }
                             .disabled(chatService.isLoading)
                         }
                     }
-                    .padding(.horizontal, 16)
-                    .padding(.vertical, 12)
+                    .padding(.horizontal, 12)
+                    .padding(.vertical, 8)
                     .background(Color(.systemGray6))
-                    .cornerRadius(25)
-                    
-                    Button(action: {}) {
-                        Image(systemName: "mic.fill")
-                            .font(.title2)
-                            .foregroundColor(.gray)
-                    }
-                    
-                    Button(action: {}) {
-                        Image(systemName: "waveform")
-                            .font(.title2)
-                            .foregroundColor(.white)
-                            .frame(width: 40, height: 40)
-                            .background(Color.black)
-                            .clipShape(Circle())
-                    }
+                    .clipShape(Capsule())
                 }
-                .padding(.horizontal, 20)
-                .padding(.bottom, 20)
+                .padding(.horizontal)
+                .padding(.vertical, 8)
+                .background(.ultraThinMaterial)
             }
-            .background(Color.white)
         }
-        .background(Color.white)
+        .background(Color(.systemBackground))
     }
     
     private func sendMessage() {
@@ -639,26 +615,36 @@ struct InlineAudioButton: View {
     @State private var isPlaying = false
     
     var body: some View {
-        Button(action: {
-            playAudio()
-        }) {
-            HStack(spacing: 8) {
-                Image(systemName: isPlaying ? "speaker.wave.2" : "play.circle")
-                    .foregroundColor(.blue)
-                    .font(.system(size: 16))
-                
-                Text(example.displayText)
-                    .font(.system(size: 14, weight: .medium))
-                    .foregroundColor(.blue)
+        VStack(spacing: 8) {
+            // Keyboard visualization with arrows
+            if example.content.hasPrefix("MIDI:") {
+                MidiKeyboardView(midiContent: example.content, showLabels: false)
+                    .frame(height: 110)
+                    .padding(.horizontal, 8)
             }
-            .padding(.horizontal, 12)
-            .padding(.vertical, 6)
-            .background(Color.blue.opacity(0.1))
-            .cornerRadius(16)
+            
+            // Play button
+            Button(action: {
+                playAudio()
+            }) {
+                HStack(spacing: 8) {
+                    Image(systemName: isPlaying ? "speaker.wave.2" : "play.circle")
+                        .foregroundColor(.blue)
+                        .font(.system(size: 16))
+                    
+                    Text(example.displayText)
+                        .font(.system(size: 14, weight: .medium))
+                        .foregroundColor(.blue)
+                }
+                .padding(.horizontal, 12)
+                .padding(.vertical, 6)
+                .background(Color.blue.opacity(0.1))
+                .cornerRadius(16)
+            }
+            .buttonStyle(PlainButtonStyle())
+            .scaleEffect(isPlaying ? 1.02 : 1.0)
+            .animation(.easeInOut(duration: 0.2), value: isPlaying)
         }
-        .buttonStyle(PlainButtonStyle())
-        .scaleEffect(isPlaying ? 1.02 : 1.0)
-        .animation(.easeInOut(duration: 0.2), value: isPlaying)
     }
     
     private func playAudio() {
@@ -713,9 +699,15 @@ struct InlineAudioButton: View {
     }
     
     private func createNoteFromMIDI(_ midiNumber: Int) -> Note {
-        let noteNames = ["C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"]
+        let noteNames = ["C", "C#", "D", "D#", "E", "F"]
+        let moreNotes = ["F#", "G", "G#", "A", "A#", "B"]
+        let allNotes = noteNames + moreNotes
         let pitchClass = midiNumber % 12
         let octave = midiNumber / 12 - 1
-        return Note(name: noteNames[pitchClass], octave: octave)
+        return Note(name: allNotes[pitchClass], octave: octave)
     }
+}
+
+#Preview {
+    ChatView()
 }

@@ -1,4 +1,6 @@
 import Foundation
+import FirebaseAuth
+import FirebaseFunctions
 
 struct ChatMessage: Identifiable {
     let id = UUID()
@@ -51,9 +53,14 @@ class ChatService: ObservableObject {
     @Published var selectedModel: AIModel = .tunedModel
     
     private let authService: ServiceAccountAuth
+    private lazy var functions = Functions.functions()
     
     init(authService: ServiceAccountAuth) {
         self.authService = authService
+        // Sign in anonymously when service initializes
+        Task {
+            try? await Auth.auth().signInAnonymously()
+        }
     }
     
     enum AIModel: String, CaseIterable {
@@ -78,6 +85,7 @@ class ChatService: ObservableObject {
     private let projectId = "1078751798332"
     private let location = "us-central1"
     
+    // Endpoint ID for the deployed tuned model
     private let endpointId = "5817141089097744384"
     
     
@@ -94,10 +102,11 @@ class ChatService: ObservableObject {
                     self.isLoading = false
                 }
             } catch {
+                Logger.shared.error("ChatService error: \(error.localizedDescription)")
                 await MainActor.run {
                     let errorMessage = ChatMessage(
                         role: "assistant",
-                        content: "Sorry, I encountered an error. Please try again.",
+                        content: "Sorry, I encountered an error: \(error.localizedDescription)\n\nPlease make sure you're authenticated with Google Cloud by running 'gcloud auth login' in Terminal.",
                         examples: []
                     )
                     self.messages.append(errorMessage)
@@ -108,47 +117,143 @@ class ChatService: ObservableObject {
     }
     
     func callVertexAI(message: String) async throws -> ChatMessage {
-        let accessToken = try await authService.getAccessToken()
+        // Always use Firebase backend
+        return try await callBackendAPI(message: message)
+    }
+    
+    private func callBackendAPI(message: String) async throws -> ChatMessage {
+        // Ensure user is authenticated
+        if Auth.auth().currentUser == nil {
+            Logger.shared.api("No user found, signing in anonymously...")
+            try await Auth.auth().signInAnonymously()
+            Logger.shared.api("Anonymous sign in successful")
+        } else {
+            Logger.shared.api("User already authenticated: \(Auth.auth().currentUser!.uid)")
+        }
         
-        let urlString = "https://us-central1-aiplatform.googleapis.com/v1/projects/\(projectId)/locations/\(location)/endpoints/\(endpointId):generateContent"
-        let url = URL(string: urlString)!
+        // Get ID token for authentication
+        let token = try await Auth.auth().currentUser?.getIDToken()
+        Logger.shared.api("Got ID token for backend call")
+        
+        // Call Firebase Function via HTTP
+        let functionURL = "https://us-central1-practice-room-869ad.cloudfunctions.net/musicTheoryChat"
+        guard let url = URL(string: functionURL) else {
+            throw APIError.invalidURL
+        }
         
         var request = URLRequest(url: url)
         request.httpMethod = "POST"
-        request.setValue("Bearer \(accessToken)", forHTTPHeaderField: "Authorization")
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        if let token = token {
+            request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+        }
         
+        let body = ["message": message]
+        request.httpBody = try JSONSerialization.data(withJSONObject: body)
+        
+        Logger.shared.api("Calling Firebase Function via HTTP with message: \(message)")
+        let (data, response) = try await URLSession.shared.data(for: request)
+        
+        guard let httpResponse = response as? HTTPURLResponse,
+              httpResponse.statusCode == 200 else {
+            Logger.shared.error("HTTP request failed with status: \((response as? HTTPURLResponse)?.statusCode ?? 0)")
+            throw APIError.requestFailed
+        }
+        
+        guard let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+              let responseText = json["response"] as? String else {
+            Logger.shared.error("Invalid response format from Firebase Function")
+            Logger.shared.error("Raw response data: \(String(data: data, encoding: .utf8) ?? "nil")")
+            throw APIError.invalidResponse
+        }
+        
+        Logger.shared.api("Firebase Function Response: \(responseText)")
+        
+        let (explanation, examples) = parseStructuredResponse(responseText)
+        Logger.shared.api("Parsed explanation: \(explanation)")
+        Logger.shared.api("Parsed examples count: \(examples.count)")
+        
+        return ChatMessage(role: "assistant", content: explanation, examples: examples)
+    }
+    
+    private func callVertexAIDirect(message: String) async throws -> ChatMessage {
+        // Make real API call to Vertex AI
+        Logger.shared.api("Calling Vertex AI with message: \(message)")
+        
+        // Get access token
+        guard let token = try? await authService.getAccessToken() else {
+            Logger.shared.error("Failed to get access token from auth service")
+            throw AuthError.authenticationFailed
+        }
+        Logger.shared.api("Got access token: \(token.prefix(50))...")
+        
+        // Prepare the request body for Gemini tuned model
         let requestBody: [String: Any] = [
-            "contents": [[
-                "role": "user",
-                "parts": [
-                    ["text": message]
-                ]
-            ]],
-            "generation_config": [
+            "contents": [
+                ["role": "user", "parts": [["text": message]]]
+            ],
+            "generationConfig": [
+                "maxOutputTokens": 2048,
                 "temperature": 0.7,
-                "topP": 1,
-                "topK": 32,
-                "maxOutputTokens": 2048
+                "topP": 0.95,
+                "topK": 40
             ]
         ]
         
-        request.httpBody = try JSONSerialization.data(withJSONObject: requestBody)
-        let (data, response) = try await URLSession.shared.data(for: request)
-        
-        if let json = try JSONSerialization.jsonObject(with: data) as? [String: Any],
-           let candidates = json["candidates"] as? [[String: Any]],
-           let firstCandidate = candidates.first,
-           let content = firstCandidate["content"] as? [String: Any],
-           let parts = content["parts"] as? [[String: Any]],
-           let firstPart = parts.first,
-           let text = firstPart["text"] as? String {
-            
-            let (explanation, examples) = parseStructuredResponse(text)
-            return ChatMessage(role: "assistant", content: explanation, examples: examples)
+        // For Gemini tuned models deployed as endpoints
+        let urlString = "https://\(location)-aiplatform.googleapis.com/v1/projects/\(projectId)/locations/\(location)/endpoints/\(endpointId):generateContent"
+        Logger.shared.api("Request URL: \(urlString)")
+        guard let url = URL(string: urlString) else {
+            throw APIError.invalidURL
         }
         
-        throw NSError(domain: "ChatService", code: 0, userInfo: [NSLocalizedDescriptionKey: "Failed to parse response"])
+        // Create the request
+        var request = URLRequest(url: url)
+        request.httpMethod = "POST"
+        request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        
+        // Send the request
+        let jsonData = try JSONSerialization.data(withJSONObject: requestBody, options: [])
+        request.httpBody = jsonData
+        
+        let (data, response) = try await URLSession.shared.data(for: request)
+        
+        guard let httpResponse = response as? HTTPURLResponse else {
+            Logger.shared.error("Invalid response type")
+            throw APIError.requestFailed
+        }
+        
+        if httpResponse.statusCode != 200 {
+            let responseString = String(data: data, encoding: .utf8) ?? "No response body"
+            Logger.shared.error("API request failed with status \(httpResponse.statusCode): \(responseString)")
+            throw APIError.requestFailed
+        }
+        
+        // Parse Gemini response format
+        guard let jsonResponse = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else {
+            Logger.shared.error("Failed to parse JSON response")
+            throw APIError.invalidResponse
+        }
+        
+        Logger.shared.api("Full response structure: \(jsonResponse)")
+        
+        // Gemini returns candidates array with content
+        guard let candidates = jsonResponse["candidates"] as? [[String: Any]],
+              let firstCandidate = candidates.first,
+              let content = firstCandidate["content"] as? [String: Any],
+              let parts = content["parts"] as? [[String: Any]],
+              let firstPart = parts.first,
+              let text = firstPart["text"] as? String else {
+            Logger.shared.error("Failed to extract text from response: \(jsonResponse)")
+            throw APIError.invalidResponse
+        }
+        
+        Logger.shared.api("Extracted text from response: \(text)")
+        let (explanation, examples) = parseStructuredResponse(text)
+        Logger.shared.api("Parsed explanation: \(explanation)")
+        Logger.shared.api("Parsed examples count: \(examples.count)")
+        return ChatMessage(role: "assistant", content: explanation, examples: examples)
     }
     
     private func parseStructuredResponse(_ content: String) -> (explanation: String, examples: [MusicalExample]) {
@@ -384,4 +489,29 @@ class ChatService: ObservableObject {
         }
     }
     
+}
+
+enum APIError: LocalizedError {
+    case invalidURL
+    case requestFailed
+    case invalidResponse
+    
+    var errorDescription: String? {
+        switch self {
+        case .invalidURL:
+            return "Invalid API URL"
+        case .requestFailed:
+            return "API request failed"
+        case .invalidResponse:
+            return "Invalid response from API"
+        }
+    }
+}
+
+enum AuthError: LocalizedError {
+    case authenticationFailed
+    
+    var errorDescription: String? {
+        "Failed to authenticate with Google Cloud"
+    }
 }

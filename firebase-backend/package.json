@@ -1,0 +1,17 @@
+{
+  "name": "practice-room-chat-backend",
+  "version": "1.0.0",
+  "description": "Firebase Functions backend for Practice Room Chat",
+  "main": "index.js",
+  "engines": {
+    "node": "20"
+  },
+  "dependencies": {
+    "firebase-admin": "^12.0.0",
+    "firebase-functions": "^5.0.0",
+    "google-auth-library": "^9.0.0"
+  },
+  "devDependencies": {
+    "firebase-functions-test": "^3.0.0"
+  }
+}
