@@ -2,192 +2,420 @@ import SwiftUI
 import AVFoundation
 
 struct MusicLessonSlidesView: View {
-    let sections: [LessonSection]
     @StateObject private var soundEngine = SoundEngine.shared
-    @State private var currentIndex = 0
-    @State private var dragOffset: CGSize = .zero
-    @State private var isAutoPlaying = false
-    @State private var autoPlayTimer: Timer?
+    @StateObject private var chatService = ChatService(authService: ServiceAccountAuth())
+    @State private var currentSlide = 0
+    @State private var messageText = ""
+    @FocusState private var isTextFieldFocused: Bool
+    @Binding var isPresented: Bool
     
-    init(jsonContent: String) {
-        self.sections = LessonSection.parse(from: jsonContent)
-    }
-    
-    // For preview/testing
-    init(sections: [LessonSection]) {
-        self.sections = sections
-    }
+    // Fake JSON response with slide structure
+    let slides: [[SlideSection]] = [
+        [
+            SlideSection(
+                type: "text",
+                slide: 1,
+                content: "**What is a Major Chord?**\n\nA major chord consists of three notes. Let's build one together step by step."
+            )
+        ],
+        [
+            SlideSection(
+                type: "text", 
+                slide: 2,
+                content: "**1. The Root Note**\nFirst, we start with our foundation - the root note. In this example, we'll use C."
+            ),
+            SlideSection(
+                type: "audio",
+                slide: 2,
+                content: "MIDI:60:1.0s",
+                displayText: "Play Root Note (C)"
+            )
+        ],
+        [
+            SlideSection(
+                type: "text",
+                slide: 3,
+                content: "**2. The Major Third**\nNext, we add the major third - exactly four half steps above our root note."
+            ),
+            SlideSection(
+                type: "audio",
+                slide: 3,
+                content: "MIDI:60,64:1.5s",
+                displayText: "Play Major Third (C-E)"
+            )
+        ],
+        [
+            SlideSection(
+                type: "text",
+                slide: 4,
+                content: "**3. The Perfect Fifth**\nFinally, we complete the chord with the perfect fifth - seven half steps from the root."
+            ),
+            SlideSection(
+                type: "audio",
+                slide: 4,
+                content: "MIDI:60,67:1.5s",
+                displayText: "Play Perfect Fifth (C-G)"
+            )
+        ],
+        [
+            SlideSection(
+                type: "text",
+                slide: 5,
+                content: "**The Complete C Major Chord**\nAll three notes together create that bright, stable major sound!"
+            ),
+            SlideSection(
+                type: "audio",
+                slide: 5,
+                content: "MIDI:60,64,67:2.0s",
+                displayText: "Play Complete C Major"
+            )
+        ]
+    ]
     
     var body: some View {
         ZStack {
             // Background
-            LinearGradient(
-                colors: [Color(.systemBackground), Color(.systemGray6)],
-                startPoint: .top,
-                endPoint: .bottom
-            )
-            .ignoresSafeArea()
+            Color(.systemBackground)
+                .ignoresSafeArea()
             
             VStack(spacing: 0) {
-                // Header
+                // Header similar to ChatView
                 HStack {
-                    Button(action: { }) {
-                        Image(systemName: "xmark")
+                    Button(action: { isPresented = false }) {
+                        Image(systemName: "chevron.left")
                             .font(.title2)
                             .foregroundColor(.primary)
                     }
                     
                     Spacer()
                     
-                    // Progress dots
-                    HStack(spacing: 6) {
-                        ForEach(0..<sections.count, id: \.self) { index in
-                            Circle()
-                                .fill(index == currentIndex ? Color.blue : Color(.systemGray4))
-                                .frame(width: index == currentIndex ? 8 : 6, 
-                                      height: index == currentIndex ? 8 : 6)
-                                .animation(.easeInOut(duration: 0.2), value: currentIndex)
-                        }
-                    }
+                    Text("Music Theory Lesson")
+                        .font(.system(size: 18, weight: .semibold))
+                        .foregroundColor(.primary)
                     
                     Spacer()
                     
-                    Button(action: toggleAutoPlay) {
-                        Image(systemName: isAutoPlaying ? "pause.fill" : "play.fill")
-                            .font(.title2)
-                            .foregroundColor(.blue)
-                    }
+                    // Empty space to balance the header
+                    Color.clear
+                        .frame(width: 30, height: 30)
                 }
-                .padding()
+                .padding(.horizontal, 20)
+                .padding(.vertical, 12)
+                .background(.ultraThinMaterial)
                 
-                // Main content area with slides
+                // Main slide content - Vertical scrolling with visible adjacent slides
                 GeometryReader { geometry in
-                    TabView(selection: $currentIndex) {
-                        ForEach(sections.indices, id: \.self) { index in
-                            SlideView(
-                                section: sections[index],
-                                onPlayAudio: playAudio
-                            )
-                            .tag(index)
-                            .frame(width: geometry.size.width)
-                        }
-                    }
-                    .tabViewStyle(PageTabViewStyle(indexDisplayMode: .never))
-                    .onChange(of: currentIndex) { _ in
-                        // Auto-play audio when slide changes
-                        if sections[currentIndex].hasAudio {
-                            DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
-                                playAudio(sections[currentIndex].audioContent ?? "")
+                    ScrollViewReader { scrollProxy in
+                        ScrollView(.vertical, showsIndicators: false) {
+                            VStack(spacing: 0) {
+                                // Add padding at the top
+                                Color.clear
+                                    .frame(height: geometry.size.height * 0.25)
+                                
+                                ForEach(Array(slides.enumerated()), id: \.offset) { index, slideContent in
+                                    VStack(spacing: 0) {
+                                        SlideContentView(sections: slideContent)
+                                            .frame(height: geometry.size.height * 0.7)
+                                            .frame(maxWidth: .infinity)
+                                            .padding(.horizontal, 20)
+                                        
+                                        // Separator line between slides
+                                        if index < slides.count - 1 {
+                                            Rectangle()
+                                                .fill(Color(.separator))
+                                                .frame(height: 0.5)
+                                                .padding(.horizontal, 40)
+                                                .padding(.vertical, 20)
+                                        }
+                                    }
+                                    .id(index)
+                                }
+                                
+                                // Add padding at the bottom
+                                Color.clear
+                                    .frame(height: geometry.size.height * 0.25)
                             }
                         }
+                        .scrollTargetBehavior(.viewAligned)
+                        .scrollTargetLayout()
+                        .onAppear {
+                            // Start at first slide
+                            scrollProxy.scrollTo(0, anchor: .center)
+                        }
                     }
                 }
                 
-                // Bottom navigation
-                HStack(spacing: 30) {
-                    Button(action: previousSlide) {
-                        Image(systemName: "chevron.left")
-                            .font(.title2)
-                            .foregroundColor(currentIndex > 0 ? .primary : .gray)
-                            .frame(width: 44, height: 44)
-                    }
-                    .disabled(currentIndex == 0)
-                    
-                    // Piano keyboard visualization (when applicable)
-                    if sections[currentIndex].hasKeyboard {
-                        MiniKeyboardView(
-                            highlightedNotes: sections[currentIndex].highlightedNotes
-                        )
-                        .frame(height: 60)
-                    } else {
-                        Spacer().frame(height: 60)
+                // Bottom control bar from ChatView
+                HStack(spacing: 12) {
+                    Button(action: {}) {
+                        Image(systemName: "plus")
+                            .font(.system(size: 24))
+                            .foregroundColor(.primary)
                     }
                     
-                    Button(action: nextSlide) {
-                        Image(systemName: "chevron.right")
-                            .font(.title2)
-                            .foregroundColor(currentIndex < sections.count - 1 ? .primary : .gray)
-                            .frame(width: 44, height: 44)
+                    HStack(spacing: 8) {
+                        TextField("Ask a question", text: $messageText)
+                            .focused($isTextFieldFocused)
+                            .onSubmit {
+                                sendMessage()
+                            }
+                        
+                        if !messageText.isEmpty {
+                            Button(action: sendMessage) {
+                                Image(systemName: "arrow.up.circle.fill")
+                                    .font(.system(size: 28))
+                                    .foregroundColor(.blue)
+                            }
+                            .disabled(chatService.isLoading)
+                        }
                     }
-                    .disabled(currentIndex == sections.count - 1)
+                    .padding(.horizontal, 12)
+                    .padding(.vertical, 8)
+                    .background(Color(.systemGray6))
+                    .clipShape(Capsule())
                 }
                 .padding(.horizontal)
-                .padding(.bottom, 20)
+                .padding(.vertical, 8)
+                .background(.ultraThinMaterial)
             }
         }
     }
     
-    private func nextSlide() {
-        withAnimation(.spring(response: 0.3, dampingFraction: 0.8)) {
-            if currentIndex < sections.count - 1 {
-                currentIndex += 1
-            }
-        }
-    }
-    
-    private func previousSlide() {
-        withAnimation(.spring(response: 0.3, dampingFraction: 0.8)) {
-            if currentIndex > 0 {
-                currentIndex -= 1
-            }
-        }
-    }
-    
-    private func toggleAutoPlay() {
-        isAutoPlaying.toggle()
-        
-        if isAutoPlaying {
-            startAutoPlay()
-        } else {
-            autoPlayTimer?.invalidate()
-            autoPlayTimer = nil
-        }
-    }
-    
-    private func startAutoPlay() {
-        autoPlayTimer?.invalidate()
-        autoPlayTimer = Timer.scheduledTimer(withTimeInterval: 3.0, repeats: true) { _ in
-            if currentIndex < sections.count - 1 {
-                nextSlide()
-            } else {
-                isAutoPlaying = false
-                autoPlayTimer?.invalidate()
-            }
-        }
-    }
-    
-    private func playAudio(_ content: String) {
-        // Parse MIDI format: "MIDI:60,64,67:2.0s"
-        if content.hasPrefix("MIDI:") {
-            let components = content.dropFirst(5).components(separatedBy: ":")
-            guard components.count >= 2 else { return }
-            
-            let noteString = components[0]
-            let notes = noteString.components(separatedBy: ",").compactMap { Int($0) }
-            
-            if notes.count == 1 {
-                let note = createNoteFromMIDI(notes[0])
-                soundEngine.playNote(note)
-            } else if notes.count == 2 {
-                let note1 = createNoteFromMIDI(notes[0])
-                let note2 = createNoteFromMIDI(notes[1])
-                soundEngine.playInterval(note1, note2, simultaneous: true)
-            } else if notes.count >= 3 {
-                let rootNote = createNoteFromMIDI(notes[0])
-                let chord = Chord(root: rootNote.name, quality: "major")
-                soundEngine.playChord(chord)
-            }
-        }
-    }
-    
-    private func createNoteFromMIDI(_ midiNumber: Int) -> Note {
-        let noteNames = ["C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"]
-        let pitchClass = midiNumber % 12
-        let octave = midiNumber / 12 - 1
-        return Note(name: noteNames[pitchClass], octave: octave)
+    private func sendMessage() {
+        guard !messageText.isEmpty else { return }
+        let message = messageText
+        messageText = ""
+        // For now, just log - in production, this would generate new slides
+        Logger.shared.ui("Slide view question: '\(message)'")
+        // Could transition back to chat or generate new slides here
+        chatService.sendMessage(message)
+        isPresented = false // Return to chat view to see response
     }
 }
 
+// Slide Section Model
+struct SlideSection: Identifiable {
+    let id = UUID()
+    let type: String
+    let slide: Int
+    let content: String
+    let displayText: String?
+    
+    init(type: String, slide: Int, content: String, displayText: String? = nil) {
+        self.type = type
+        self.slide = slide
+        self.content = content
+        self.displayText = displayText
+    }
+}
+
+// Individual Slide Content View
+struct SlideContentView: View {
+    let sections: [SlideSection]
+    @StateObject private var soundEngine = SoundEngine.shared
+    @State private var isPlaying = false
+    
+    // Extract MIDI notes from audio sections
+    private var highlightedNotes: Set<Int> {
+        var notes = Set<Int>()
+        for section in sections where section.type == "audio" {
+            if section.content.starts(with: "MIDI:") {
+                let parts = section.content.dropFirst(5).split(separator: ":")
+                if let noteString = parts.first {
+                    let midiNotes = String(noteString).split(separator: ",").compactMap { Int($0) }
+                    notes.formUnion(midiNotes)
+                }
+            }
+        }
+        return notes
+    }
+    
+    var body: some View {
+        VStack(spacing: 20) {
+            Spacer()
+            
+            // Text content
+            ForEach(sections.filter { $0.type == "text" }) { section in
+                SlideTextView(content: section.content)
+            }
+            
+            // Piano keyboard visualization
+            if !highlightedNotes.isEmpty {
+                VStack(spacing: 12) {
+                    Text("Piano Keys")
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                    
+                    PianoKeyboardView(highlightedNotes: highlightedNotes)
+                        .frame(height: 120)
+                        .padding(.horizontal, 40)
+                }
+                .padding(.vertical, 20)
+            }
+            
+            // Audio controls
+            ForEach(sections.filter { $0.type == "audio" }) { section in
+                AudioPlayButton(
+                    content: section.content,
+                    displayText: section.displayText ?? "Play"
+                )
+            }
+            
+            Spacer()
+        }
+        .padding(.horizontal, 30)
+    }
+}
+
+// Text component for slides
+struct SlideTextView: View {
+    let content: String
+    
+    var body: some View {
+        let parts = content.components(separatedBy: "**")
+        
+        VStack(spacing: 15) {
+            ForEach(Array(parts.enumerated()), id: \.offset) { index, part in
+                if index % 2 == 1 {
+                    // Bold text
+                    Text(part)
+                        .font(.title2)
+                        .fontWeight(.bold)
+                        .foregroundColor(.primary)
+                        .multilineTextAlignment(.center)
+                } else if !part.isEmpty {
+                    // Regular text
+                    Text(part.trimmingCharacters(in: .whitespacesAndNewlines))
+                        .font(.body)
+                        .foregroundColor(.secondary)
+                        .multilineTextAlignment(.center)
+                }
+            }
+        }
+    }
+}
+
+// Audio play button component
+struct AudioPlayButton: View {
+    let content: String
+    let displayText: String
+    @StateObject private var soundEngine = SoundEngine.shared
+    @State private var isPlaying = false
+    
+    var body: some View {
+        Button(action: playAudio) {
+            HStack(spacing: 15) {
+                Image(systemName: isPlaying ? "stop.circle.fill" : "play.circle.fill")
+                    .font(.system(size: 44))
+                
+                Text(displayText)
+                    .font(.title3)
+                    .fontWeight(.semibold)
+            }
+            .foregroundColor(.white)
+            .padding(.horizontal, 30)
+            .padding(.vertical, 20)
+            .background(
+                RoundedRectangle(cornerRadius: 20)
+                    .fill(LinearGradient(
+                        colors: [Color.blue, Color.blue.opacity(0.8)],
+                        startPoint: .topLeading,
+                        endPoint: .bottomTrailing
+                    ))
+            )
+            .shadow(color: .blue.opacity(0.3), radius: 15, x: 0, y: 10)
+        }
+        .scaleEffect(isPlaying ? 1.05 : 1.0)
+        .animation(.spring(response: 0.3), value: isPlaying)
+    }
+    
+    func playAudio() {
+        guard !isPlaying else { return }
+        
+        isPlaying = true
+        
+        // Parse MIDI content and play
+        if content.starts(with: "MIDI:") {
+            let parts = content.dropFirst(5).split(separator: ":")
+            if parts.count >= 2 {
+                let notes = String(parts[0]).split(separator: ",").compactMap { Int($0) }
+                
+                if notes.count == 1 {
+                    soundEngine.playNote(midiNote: notes[0], duration: 0.5)
+                } else if notes.count > 1 {
+                    soundEngine.playChord(midiNotes: notes, duration: 2.0)
+                }
+            }
+        }
+        
+        // Reset after delay
+        DispatchQueue.main.asyncAfter(deadline: .now() + 2.5) {
+            isPlaying = false
+        }
+    }
+}
+
+// Enhanced Piano Keyboard View
+struct PianoKeyboardView: View {
+    let highlightedNotes: Set<Int>
+    
+    private let whiteKeyPositions = [0, 2, 4, 5, 7, 9, 11] // C, D, E, F, G, A, B
+    private let blackKeyPositions: [(note: Int, position: CGFloat)] = [
+        (1, 0.65),   // C# - between C and D
+        (3, 1.35),   // D# - between D and E
+        (6, 3.65),   // F# - between F and G
+        (8, 4.35),   // G# - between G and A
+        (10, 5.35)   // A# - between A and B
+    ]
+    
+    var body: some View {
+        GeometryReader { geometry in
+            let keyWidth = geometry.size.width / 7
+            
+            ZStack(alignment: .topLeading) {
+                // White keys
+                HStack(spacing: 1) {
+                    ForEach(0..<7, id: \.self) { index in
+                        let noteNumber = 60 + whiteKeyPositions[index]
+                        let isHighlighted = highlightedNotes.contains(noteNumber)
+                        
+                        RoundedRectangle(cornerRadius: 4)
+                            .fill(isHighlighted ? 
+                                  LinearGradient(colors: [Color.blue.opacity(0.8), Color.blue],
+                                               startPoint: .top, endPoint: .bottom) :
+                                  LinearGradient(colors: [Color.white, Color(.systemGray6)],
+                                               startPoint: .top, endPoint: .bottom))
+                            .overlay(
+                                RoundedRectangle(cornerRadius: 4)
+                                    .stroke(Color(.systemGray3), lineWidth: 1)
+                            )
+                            .shadow(color: isHighlighted ? .blue.opacity(0.5) : .black.opacity(0.1), 
+                                   radius: isHighlighted ? 8 : 2, y: 2)
+                    }
+                }
+                
+                // Black keys - positioned centered between white keys  
+                ForEach(blackKeyPositions, id: \.note) { key in
+                    let noteNumber = 60 + key.note
+                    let isHighlighted = highlightedNotes.contains(noteNumber)
+                    
+                    RoundedRectangle(cornerRadius: 2)
+                        .fill(isHighlighted ?
+                              LinearGradient(colors: [Color.blue, Color.blue.opacity(0.6)],
+                                           startPoint: .top, endPoint: .bottom) :
+                              LinearGradient(colors: [Color.black, Color(.systemGray2)],
+                                           startPoint: .top, endPoint: .bottom))
+                        .frame(width: keyWidth * 0.6, height: geometry.size.height * 0.6)
+                        .offset(x: (key.position * keyWidth) + (keyWidth * 0.2))
+                        .shadow(color: isHighlighted ? .blue.opacity(0.6) : .black.opacity(0.3), 
+                               radius: isHighlighted ? 2 : 1, y: 1)
+                }
+            }
+        }
+    }
+}
+
+// Placeholder SlideView for backward compatibility
 struct SlideView: View {
     let section: LessonSection
     let onPlayAudio: (String) -> Void
@@ -243,43 +471,6 @@ struct SlideView: View {
                 DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
                     onPlayAudio(section.audioContent ?? "")
                     hasPlayedAudio = true
-                }
-            }
-        }
-    }
-}
-
-struct MiniKeyboardView: View {
-    let highlightedNotes: Set<Int>
-    
-    private let whiteKeys = [0, 2, 4, 5, 7, 9, 11] // C, D, E, F, G, A, B
-    private let blackKeys = [1, 3, 6, 8, 10] // C#, D#, F#, G#, A#
-    
-    var body: some View {
-        GeometryReader { geometry in
-            ZStack(alignment: .bottom) {
-                // White keys
-                HStack(spacing: 2) {
-                    ForEach(0..<7, id: \.self) { index in
-                        let noteNumber = 60 + whiteKeys[index] // Starting from C4
-                        Rectangle()
-                            .fill(highlightedNotes.contains(noteNumber) ? Color.blue : Color.white)
-                            .border(Color.gray, width: 1)
-                            .frame(width: geometry.size.width / 7 - 2)
-                    }
-                }
-                
-                // Black keys
-                HStack(spacing: 0) {
-                    ForEach(0..<7, id: \.self) { index in
-                        if index != 2 && index != 6 { // No black key between E-F and B-C
-                            let noteNumber = 60 + (index < 2 ? blackKeys[index] : blackKeys[index - 1])
-                            Rectangle()
-                                .fill(highlightedNotes.contains(noteNumber) ? Color.blue.opacity(0.8) : Color.black)
-                                .frame(width: geometry.size.width / 10, height: geometry.size.height * 0.6)
-                                .offset(x: CGFloat(index) * (geometry.size.width / 7))
-                        }
-                    }
                 }
             }
         }
@@ -400,20 +591,5 @@ struct LessonSection: Identifiable {
 }
 
 #Preview {
-    MusicLessonSlidesView(sections: [
-        LessonSection(
-            type: .text,
-            title: "What is a Major Chord?",
-            content: "A major chord consists of three notes. Let's explore how it's built.",
-            audioContent: nil,
-            displayText: nil
-        ),
-        LessonSection(
-            type: .audio,
-            title: "The Root Note",
-            content: "First, we have our root note, which in this case is C.",
-            audioContent: "MIDI:60:1.0s",
-            displayText: "Play Root Note (C)"
-        )
-    ])
+    MusicLessonSlidesView(isPresented: .constant(true))
 }

@@ -7,11 +7,5 @@
 
 ## Project Context
 - iOS SwiftUI music theory chat app
-- Uses OpenAI API for responses with structured JSON format
 - Features audio playback of musical examples (chords, scales, progressions)
-- RAG (Retrieval Augmented Generation) system for consistent high-quality responses
-
-## Current Focus
-- Implementing proper RAG system where AI uses curated reference examples as context
-- NOT copy-paste responses, but AI-generated responses guided by perfect examples
-- Building music theory knowledge base starting with major chords
+- Backend returns responses in various formats (sometimes JSON, sometimes plain text)

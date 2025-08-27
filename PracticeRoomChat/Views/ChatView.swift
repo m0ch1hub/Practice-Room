@@ -6,6 +6,7 @@ struct ChatView: View {
     @StateObject private var soundEngine = SoundEngine.shared
     @State private var messageText = ""
     @FocusState private var isTextFieldFocused: Bool
+    @State private var showSlidesView = false
     
     var body: some View {
         ZStack {
@@ -62,6 +63,13 @@ struct ChatView: View {
                         .foregroundColor(.primary)
                     
                     Spacer()
+                    
+                    // Test button for slides
+                    Button(action: { showSlidesView = true }) {
+                        Image(systemName: "play.rectangle.fill")
+                            .font(.title2)
+                            .foregroundColor(.blue)
+                    }
                 }
                 .padding(.horizontal, 20)
                 .padding(.vertical, 12)
@@ -114,6 +122,9 @@ struct ChatView: View {
             }
         }
         .background(Color(.systemBackground))
+        .fullScreenCover(isPresented: $showSlidesView) {
+            MusicLessonSlidesView(isPresented: $showSlidesView)
+        }
     }
     
     private func sendMessage() {
@@ -614,13 +625,23 @@ struct InlineAudioButton: View {
     let example: MusicalExample
     @State private var isPlaying = false
     
+    private func extractMidiNotes(from content: String) -> Set<Int> {
+        guard content.hasPrefix("MIDI:") else { return [] }
+        let midiContent = String(content.dropFirst(5))
+        let components = midiContent.components(separatedBy: ":")
+        guard let noteStr = components.first else { return [] }
+        let notes = noteStr.components(separatedBy: ",").compactMap { Int($0) }
+        return Set(notes)
+    }
+    
     var body: some View {
         VStack(spacing: 8) {
             // Keyboard visualization with arrows
             if example.content.hasPrefix("MIDI:") {
-                MidiKeyboardView(midiContent: example.content, showLabels: false)
-                    .frame(height: 110)
-                    .padding(.horizontal, 8)
+                let midiNotes = extractMidiNotes(from: example.content)
+                PianoKeyboardView(highlightedNotes: midiNotes)
+                    .frame(width: 200, height: 35)
+                    .padding(.vertical, 4)
             }
             
             // Play button

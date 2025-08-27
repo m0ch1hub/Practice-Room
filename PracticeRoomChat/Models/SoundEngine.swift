@@ -19,6 +19,27 @@ class SoundEngine: ObservableObject {
         loadSoundFont()
     }
     
+    // Simple methods for slide view
+    func playNote(midiNote: Int, duration: Double) {
+        sampler.startNote(UInt8(midiNote), withVelocity: 80, onChannel: 0)
+        
+        DispatchQueue.main.asyncAfter(deadline: .now() + duration) { [weak self] in
+            self?.sampler.stopNote(UInt8(midiNote), onChannel: 0)
+        }
+    }
+    
+    func playChord(midiNotes: [Int], duration: Double) {
+        for note in midiNotes {
+            sampler.startNote(UInt8(note), withVelocity: 80, onChannel: 0)
+        }
+        
+        DispatchQueue.main.asyncAfter(deadline: .now() + duration) { [weak self] in
+            for note in midiNotes {
+                self?.sampler.stopNote(UInt8(note), onChannel: 0)
+            }
+        }
+    }
+    
     private func setupAudioEngine() {
         Logger.shared.audio("Setting up audio engine")
         
