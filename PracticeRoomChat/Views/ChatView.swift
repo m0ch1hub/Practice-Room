@@ -205,7 +205,21 @@ struct ChatView: View {
             soundEngine.playNote(note)
             
         case .chord:
-            if let chord = MusicTheory.shared.parseChordProgression(example.content).first {
+            // Support both symbolic chord strings (e.g., "C#m7") and MIDI content (e.g., "MIDI:60,64,67:2.0s")
+            if example.content.hasPrefix("MIDI:") {
+                // Parse MIDI and play directly without going through chord-symbol parser
+                let midiContent = String(example.content.dropFirst(5))
+                let parts = midiContent.components(separatedBy: ":")
+                if let notesStr = parts.first {
+                    let noteNumbers = notesStr.components(separatedBy: ",").compactMap { Int($0) }
+                    let duration: Double = {
+                        if parts.count >= 2, parts[1].hasSuffix("s"),
+                           let val = Double(parts[1].dropLast()) { return val }
+                        return 1.0
+                    }()
+                    SoundEngine.shared.playChord(midiNotes: noteNumbers, duration: duration)
+                }
+            } else if let chord = MusicTheory.shared.parseChordProgression(example.content).first {
                 soundEngine.playChord(chord)
             }
         }
@@ -475,9 +489,8 @@ struct FormattedSection {
                     .fixedSize(horizontal: false, vertical: true)
                 
             case .paragraph:
-                formatInlineText(content)
-                    .foregroundColor(.primary)
-                    .fixedSize(horizontal: false, vertical: true)
+                // Render inline audio markers inside paragraph text
+                renderTextWithInlineAudio(content)
                 
             case .numberedItem:
                 HStack(alignment: .top, spacing: 12) {
@@ -487,9 +500,7 @@ struct FormattedSection {
                         .frame(width: 16, alignment: .leading)
                     
                     VStack(alignment: .leading, spacing: 0) {
-                        formatInlineText(removeNumberFromContent(content))
-                            .foregroundColor(.primary)
-                            .fixedSize(horizontal: false, vertical: true)
+                        renderTextWithInlineAudio(removeNumberFromContent(content))
                     }
                     
                     Spacer()
@@ -504,9 +515,7 @@ struct FormattedSection {
                         .frame(width: 16, alignment: .leading)
                     
                     VStack(alignment: .leading, spacing: 0) {
-                        formatInlineText(content)
-                            .foregroundColor(.primary)
-                            .fixedSize(horizontal: false, vertical: true)
+                        renderTextWithInlineAudio(content)
                     }
                     
                     Spacer()
@@ -523,6 +532,69 @@ struct FormattedSection {
         }
     }
     
+    // Split a string into text and inline-audio fragments, and render them vertically.
+    // This converts inline [AUDIO:MIDI:...:Label] markers into InlineAudioButton views.
+    private func renderTextWithInlineAudio(_ text: String) -> some View {
+        let pattern = "\\[AUDIO:MIDI:[^\\]]+\\]"
+        let regex = try! NSRegularExpression(pattern: pattern, options: [])
+        let nsRange = NSRange(text.startIndex..<text.endIndex, in: text)
+        let matches = regex.matches(in: text, options: [], range: nsRange)
+        
+        var fragments: [Fragment] = []
+        var cursor = text.startIndex
+        
+        for match in matches {
+            guard let range = Range(match.range, in: text) else { continue }
+            if cursor < range.lowerBound {
+                let before = String(text[cursor..<range.lowerBound])
+                if !before.trimmingCharacters(in: .whitespaces).isEmpty {
+                    fragments.append(.text(before))
+                }
+            }
+            let marker = String(text[range])
+            if let example = parseAudioMarker(marker) {
+                fragments.append(.audio(example))
+            }
+            cursor = range.upperBound
+        }
+        if cursor < text.endIndex {
+            let tail = String(text[cursor..<text.endIndex])
+            if !tail.trimmingCharacters(in: .whitespaces).isEmpty {
+                fragments.append(.text(tail))
+            }
+        }
+        
+        // If no audio markers found, fall back to simple formatted text
+        if fragments.isEmpty {
+            return AnyView(
+                formatInlineText(text)
+                    .foregroundColor(.primary)
+                    .fixedSize(horizontal: false, vertical: true)
+            )
+        }
+        
+        return AnyView(
+            VStack(alignment: .leading, spacing: 6) {
+                ForEach(fragments.indices, id: \.self) { idx in
+                    switch fragments[idx] {
+                    case .text(let str):
+                        formatInlineText(str)
+                            .foregroundColor(.primary)
+                            .fixedSize(horizontal: false, vertical: true)
+                    case .audio(let ex):
+                        InlineAudioButton(example: ex)
+                            .padding(.vertical, 4)
+                    }
+                }
+            }
+        )
+    }
+
+    private enum Fragment {
+        case text(String)
+        case audio(MusicalExample)
+    }
+
     private func extractNumberFromContent(_ content: String) -> String {
         if let match = content.range(of: #"^(\d+)\."#, options: .regularExpression) {
             return String(content[match])
@@ -705,7 +777,20 @@ struct InlineAudioButton: View {
             }
             
         case .chord:
-            if let chord = MusicTheory.shared.parseChordProgression(example.content).first {
+            // Support MIDI chord directly, otherwise parse symbol
+            if example.content.hasPrefix("MIDI:") {
+                let midiContent = String(example.content.dropFirst(5))
+                let parts = midiContent.components(separatedBy: ":")
+                if let notesStr = parts.first {
+                    let noteNumbers = notesStr.components(separatedBy: ",").compactMap { Int($0) }
+                    let duration: Double = {
+                        if parts.count >= 2, parts[1].hasSuffix("s"),
+                           let val = Double(parts[1].dropLast()) { return val }
+                        return 1.0
+                    }()
+                    SoundEngine.shared.playChord(midiNotes: noteNumbers, duration: duration)
+                }
+            } else if let chord = MusicTheory.shared.parseChordProgression(example.content).first {
                 soundEngine.playChord(chord)
             }
         

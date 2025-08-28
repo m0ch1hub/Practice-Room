@@ -229,6 +229,24 @@ struct SlideContentView: View {
         }
         return notes
     }
+
+    // If a slide contains an audio section with exactly two notes, we expose
+    // that pair so we can render an IntervalBridge overlay above the keyboard.
+    // This keeps the visual tightly coupled to the data coming from a lesson
+    // slide, while staying decoupled from the keyboard implementation details.
+    private var intervalPair: (Int, Int)? {
+        for section in sections where section.type == "audio" {
+            guard section.content.starts(with: "MIDI:") else { continue }
+            let parts = section.content.dropFirst(5).split(separator: ":")
+            if let noteString = parts.first {
+                let notes = String(noteString).split(separator: ",").compactMap { Int($0) }
+                if notes.count == 2 {
+                    return (notes[0], notes[1])
+                }
+            }
+        }
+        return nil
+    }
     
     var body: some View {
         VStack(spacing: 20) {
@@ -241,11 +259,17 @@ struct SlideContentView: View {
             
             // Piano keyboard visualization
             if !highlightedNotes.isEmpty {
-                VStack(spacing: 12) {
-                    Text("Piano Keys")
-                        .font(.caption)
-                        .foregroundColor(.secondary)
-                    
+                VStack(spacing: 8) {
+                    // Place the interval bridge ABOVE the keyboard for better
+                    // readability and to avoid overlapping the key caps.
+                    if let pair = intervalPair {
+                        IntervalBridgeView(startMidi: pair.0, endMidi: pair.1)
+                            .frame(height: 44)
+                            .padding(.horizontal, 40)
+                            .allowsHitTesting(false)
+                            .accessibilityHidden(true)
+                    }
+
                     PianoKeyboardView(highlightedNotes: highlightedNotes)
                         .frame(height: 120)
                         .padding(.horizontal, 40)
@@ -360,21 +384,24 @@ struct PianoKeyboardView: View {
     let highlightedNotes: Set<Int>
     
     private let whiteKeyPositions = [0, 2, 4, 5, 7, 9, 11] // C, D, E, F, G, A, B
-    private let blackKeyPositions: [(note: Int, position: CGFloat)] = [
-        (1, 0.65),   // C# - between C and D
-        (3, 1.35),   // D# - between D and E
-        (6, 3.65),   // F# - between F and G
-        (8, 4.35),   // G# - between G and A
-        (10, 5.35)   // A# - between A and B
+    // Black keys mapped to the white-key boundary they sit over (1-based)
+    private let blackKeyBoundaries: [(note: Int, boundary: Int)] = [
+        (1, 1),  // C# between C and D
+        (3, 2),  // D# between D and E
+        (6, 4),  // F# between F and G
+        (8, 5),  // G# between G and A
+        (10, 6)  // A# between A and B
     ]
     
     var body: some View {
         GeometryReader { geometry in
-            let keyWidth = geometry.size.width / 7
+            // Equal white keys without gaps; black keys ~60% width, centered on boundaries
+            let whiteKeyWidth = geometry.size.width / 7
+            let blackKeyWidth = whiteKeyWidth * 0.6
             
             ZStack(alignment: .topLeading) {
                 // White keys
-                HStack(spacing: 1) {
+                HStack(spacing: 0) {
                     ForEach(0..<7, id: \.self) { index in
                         let noteNumber = 60 + whiteKeyPositions[index]
                         let isHighlighted = highlightedNotes.contains(noteNumber)
@@ -387,15 +414,16 @@ struct PianoKeyboardView: View {
                                                startPoint: .top, endPoint: .bottom))
                             .overlay(
                                 RoundedRectangle(cornerRadius: 4)
-                                    .stroke(Color(.systemGray3), lineWidth: 1)
+                                    .stroke(Color(.systemGray3), lineWidth: 0.5)
                             )
                             .shadow(color: isHighlighted ? .blue.opacity(0.5) : .black.opacity(0.1), 
                                    radius: isHighlighted ? 8 : 2, y: 2)
+                            .frame(width: whiteKeyWidth)
                     }
                 }
                 
                 // Black keys - positioned centered between white keys  
-                ForEach(blackKeyPositions, id: \.note) { key in
+                ForEach(blackKeyBoundaries, id: \.note) { key in
                     let noteNumber = 60 + key.note
                     let isHighlighted = highlightedNotes.contains(noteNumber)
                     
@@ -405,13 +433,142 @@ struct PianoKeyboardView: View {
                                            startPoint: .top, endPoint: .bottom) :
                               LinearGradient(colors: [Color.black, Color(.systemGray2)],
                                            startPoint: .top, endPoint: .bottom))
-                        .frame(width: keyWidth * 0.6, height: geometry.size.height * 0.6)
-                        .offset(x: (key.position * keyWidth) + (keyWidth * 0.2))
+                        .frame(width: blackKeyWidth, height: geometry.size.height * 0.6)
+                        .offset(x: (CGFloat(key.boundary) * whiteKeyWidth) - (blackKeyWidth / 2))
                         .shadow(color: isHighlighted ? .blue.opacity(0.6) : .black.opacity(0.3), 
                                radius: isHighlighted ? 2 : 1, y: 1)
                 }
             }
         }
+    }
+}
+
+// Interval Bridge Overlay
+// -----------------------
+// Draws a small arc above the keyboard that spans between two MIDI notes.
+// The arc's height and color encode the interval size (in semitones) so the
+// relationship is immediately legible at a glance. This view purposefully does
+// not try to know anything about keyboard drawing; instead it mirrors the
+// spacing logic used by PianoKeyboardView (7 equal white keys, black keys on
+// boundaries) to compute x-positions.
+struct IntervalBridgeView: View {
+    let startMidi: Int
+    let endMidi: Int
+    
+    private var semitoneDistance: Int {
+        abs(endMidi - startMidi)
+    }
+    
+    var body: some View {
+        GeometryReader { geometry in
+            let width = geometry.size.width
+            let x1 = xPosition(for: startMidi, totalWidth: width)
+            let x2 = xPosition(for: endMidi, totalWidth: width)
+            let minX = min(x1, x2)
+            let maxX = max(x1, x2)
+            let color = colorForSemitones(semitoneDistance)
+            let label = intervalName(for: semitoneDistance)
+            let tickHeight = arcHeightForSemitones(semitoneDistance, totalWidth: width)
+            
+            ZStack(alignment: .topLeading) {
+                // Simple black bracket with small vertical ticks: ┌────┐
+                IntervalBracket(startX: minX, endX: maxX, tickHeight: tickHeight)
+                    .stroke(color, style: StrokeStyle(lineWidth: 2.5, lineCap: .round))
+                    .padding(.top, 0)
+
+                // Minimal, centered label with interval name only
+                Text(label)
+                    .font(.caption.bold())
+                    .foregroundColor(.black)
+                    .position(x: (minX + maxX) / 2, y: 6)
+                    .accessibilityLabel("Interval: \(label)")
+            }
+        }
+    }
+    
+    // MARK: - Layout helpers
+    
+    // Mirrors the spacing used by PianoKeyboardView: 7 equal white keys across
+    // the width. White key centers are at .5, 1.5, 2.5, 3.5, 4.5, 5.5, 6.5
+    // multiples of a white key's width. Black keys sit on whole-number
+    // boundaries between white keys.
+    private func xPosition(for midi: Int, totalWidth: CGFloat) -> CGFloat {
+        let stepMap: [Int: CGFloat] = [
+            0: 0.5, // C
+            1: 1.0, // C# boundary
+            2: 1.5, // D
+            3: 2.0, // D# boundary
+            4: 2.5, // E
+            5: 3.5, // F
+            6: 4.0, // F# boundary
+            7: 4.5, // G
+            8: 5.0, // G# boundary
+            9: 5.5, // A
+            10: 6.0, // A# boundary
+            11: 6.5  // B
+        ]
+        let noteClass = midi % 12
+        let step = stepMap[noteClass] ?? 0.5
+        let whiteKeyWidth = totalWidth / 7
+        return step * whiteKeyWidth
+    }
+    
+    private func colorForSemitones(_ n: Int) -> Color { .black }
+    
+    private func intervalName(for n: Int) -> String {
+        switch n {
+        case 0: return "Unison"
+        case 1: return "Minor second"
+        case 2: return "Major second"
+        case 3: return "Minor third"
+        case 4: return "Major third"
+        case 5: return "Perfect fourth"
+        case 6: return "Tritone"
+        case 7: return "Perfect fifth"
+        case 8: return "Minor sixth"
+        case 9: return "Major sixth"
+        case 10: return "Minor seventh"
+        case 11: return "Major seventh"
+        case 12: return "Octave"
+        default: return "Interval"
+        }
+    }
+    
+    private func arcHeightForSemitones(_ n: Int, totalWidth: CGFloat) -> CGFloat {
+        // Height here is used as the bracket tick length. Keep it compact.
+        let base: CGFloat = 8
+        let perStep: CGFloat = 1.2
+        let maxHeight: CGFloat = 16
+        return min(base + CGFloat(min(n, 9)) * perStep, maxHeight)
+    }
+}
+
+// Simple bracket used by IntervalBridgeView: a straight line with short
+// vertical ticks at both ends. Intentionally minimal and black.
+struct IntervalBracket: Shape {
+    let startX: CGFloat
+    let endX: CGFloat
+    let tickHeight: CGFloat
+
+    func path(in rect: CGRect) -> Path {
+        var p = Path()
+        let y: CGFloat = 18
+        let xMin = min(startX, endX)
+        let xMax = max(startX, endX)
+        
+        // Left tick
+        p.move(to: CGPoint(x: xMin, y: y))
+        p.addLine(to: CGPoint(x: xMin, y: y + tickHeight))
+        
+        // Horizontal span
+        p.move(to: CGPoint(x: xMin, y: y))
+        p.addLine(to: CGPoint(x: xMax, y: y))
+        
+        // Right tick
+        p.move(to: CGPoint(x: xMax, y: y))
+        p.addLine(to: CGPoint(x: xMax, y: y + tickHeight))
+        
+        return p
     }
 }
 

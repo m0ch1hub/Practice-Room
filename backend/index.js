@@ -5,7 +5,8 @@ const axios = require('axios');
 // Configuration
 const PROJECT_ID = '1078751798332';
 const LOCATION = 'us-central1';
-const ENDPOINT_ID = '5817141089097744384';
+// Update this with your tuned model's endpoint ID after deployment
+const ENDPOINT_ID = process.env.TUNED_MODEL_ENDPOINT_ID || '873596073128493056';
 
 // Initialize auth client
 const auth = new GoogleAuth({
@@ -89,7 +90,7 @@ functions.http('musicTheoryChat', async (req, res) => {
       ],
       generationConfig: {
         maxOutputTokens: 2048,
-        temperature: 0.7,
+        temperature: 0.5,  // Lower temperature for more consistent responses
         topP: 0.95,
         topK: 40
       }

@@ -3,12 +3,11 @@ import Foundation
 class BackendService: ObservableObject {
     @Published var isAuthenticated = true
     
-    // Production backend URL - update after deploying Cloud Function
-    private let backendURL = "https://us-central1-1078751798332.cloudfunctions.net/musicTheoryChat"
+    // Production backend URL with tuned model
+    private let backendURL = "https://us-central1-gen-lang-client-0477203387.cloudfunctions.net/musicTheoryChat"
     
     // API Key - in production, store this securely in Keychain
-    // For now, update this after running deploy.sh
-    private let apiKey = "YOUR_API_KEY_HERE"  // Update with generated key
+    private let apiKey = "Cb1k3kbIFJCbdtomV8bQKLWXAZ2pwE+dA62GwZRpdRQ="
     
     func callMusicTheoryAPI(message: String) async throws -> String {
         guard let url = URL(string: backendURL) else {

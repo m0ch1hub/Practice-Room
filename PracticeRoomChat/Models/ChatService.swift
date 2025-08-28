@@ -86,7 +86,7 @@ class ChatService: ObservableObject {
     private let location = "us-central1"
     
     // Endpoint ID for the deployed tuned model
-    private let endpointId = "5817141089097744384"
+    private let endpointId = "873596073128493056"
     
     
     func sendMessage(_ message: String) {
@@ -135,8 +135,8 @@ class ChatService: ObservableObject {
         let token = try await Auth.auth().currentUser?.getIDToken()
         Logger.shared.api("Got ID token for backend call")
         
-        // Call Firebase Function via HTTP
-        let functionURL = "https://us-central1-practice-room-869ad.cloudfunctions.net/musicTheoryChat"
+        // Call Firebase Function via HTTP (using Google Cloud Function with tuned model)
+        let functionURL = "https://us-central1-gen-lang-client-0477203387.cloudfunctions.net/musicTheoryChat"
         guard let url = URL(string: functionURL) else {
             throw APIError.invalidURL
         }
@@ -144,9 +144,7 @@ class ChatService: ObservableObject {
         var request = URLRequest(url: url)
         request.httpMethod = "POST"
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
-        if let token = token {
-            request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
-        }
+        request.setValue("Cb1k3kbIFJCbdtomV8bQKLWXAZ2pwE+dA62GwZRpdRQ=", forHTTPHeaderField: "X-API-Key")
         
         let body = ["message": message]
         request.httpBody = try JSONSerialization.data(withJSONObject: body)
@@ -385,13 +383,30 @@ class ChatService: ObservableObject {
         var processedText = text
         var examples: [MusicalExample] = []
         
-        // Look for MIDI patterns in the text
+        // Guard against double-wrapping: collect existing [AUDIO:...] ranges first
+        // so we do not re-wrap "MIDI:..." that already lives inside an [AUDIO:...] tag.
+        // This was causing outputs like [AUDIO:[AUDIO:MIDI:...]:Label].
+        let audioTagPattern = "\\[AUDIO:[^\\]]+\\]"
+        let audioRegex = try! NSRegularExpression(pattern: audioTagPattern, options: [])
+        let audioMatches = audioRegex.matches(in: text, options: [], range: NSRange(text.startIndex..<text.endIndex, in: text))
+        let audioRanges: [NSRange] = audioMatches.map { $0.range }
+
+        // Look for bare MIDI patterns in the text (outside of any [AUDIO:...] tags)
         let midiPattern = "MIDI:([0-9,]+)(?::([0-9.]+s))?"
         let regex = try! NSRegularExpression(pattern: midiPattern, options: [])
         let matches = regex.matches(in: text, options: [], range: NSRange(text.startIndex..<text.endIndex, in: text))
         
         // Process matches in reverse order to maintain string indices
         for match in matches.reversed() {
+            // Skip if this MIDI match sits inside an existing [AUDIO:...] tag
+            let fullMatchRange = match.range(at: 0)
+            let isInsideAudioTag = audioRanges.contains { audioRange in
+                let startsInside = NSLocationInRange(fullMatchRange.location, audioRange)
+                let endsInside = NSLocationInRange(fullMatchRange.location + fullMatchRange.length - 1, audioRange)
+                return startsInside && endsInside
+            }
+            if isInsideAudioTag { continue }
+
             if let midiRange = Range(match.range(at: 1), in: text) {
                 let midiNotes = String(text[midiRange])
                 let duration = match.range(at: 2).location != NSNotFound ? 

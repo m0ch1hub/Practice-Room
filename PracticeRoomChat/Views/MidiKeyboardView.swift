@@ -45,13 +45,13 @@ struct MidiKeyboardView: View {
             GeometryReader { geometry in
                 ZStack(alignment: .bottom) {
                     // White keys
-                    HStack(spacing: 1) {
+                    HStack(spacing: 0) {
                         ForEach(0..<14, id: \.self) { index in
                             WhiteKey(
                                 noteNumber: whiteKeyMidiNumber(for: index),
                                 isHighlighted: midiNotes.contains(whiteKeyMidiNumber(for: index)),
                                 showLabel: showLabels,
-                                width: (geometry.size.width - 13) / 14
+                                width: (geometry.size.width) / 14
                             )
                         }
                     }
@@ -63,10 +63,10 @@ struct MidiKeyboardView: View {
                                 BlackKey(
                                     noteNumber: blackKeyMidiNumber(for: index),
                                     isHighlighted: midiNotes.contains(blackKeyMidiNumber(for: index)),
-                                    width: (geometry.size.width - 13) / 14 * 0.6,
+                                    width: (geometry.size.width) / 14 * 0.6,
                                     height: geometry.size.height * 0.6
                                 )
-                                .offset(x: blackKeyOffset(for: index, keyWidth: (geometry.size.width - 13) / 14))
+                                .offset(x: blackKeyOffset(for: index, keyWidth: (geometry.size.width) / 14))
                             }
                         }
                     }
@@ -111,19 +111,10 @@ struct MidiKeyboardView: View {
     }
     
     private func blackKeyOffset(for index: Int, keyWidth: CGFloat) -> CGFloat {
-        let positions: [Int: CGFloat] = [
-            0: 0.65,   // C#
-            1: 1.35,   // D#
-            3: 3.65,   // F#
-            4: 4.35,   // G#
-            5: 5.35,   // A#
-            7: 7.65,   // C#
-            8: 8.35,   // D#
-            10: 10.65, // F#
-            11: 11.35, // G#
-            12: 12.35  // A#
-        ]
-        return (positions[index] ?? 0) * keyWidth
+        // Place each black key centered on the boundary after the white key at `index`.
+        // With realistic spacing (no gaps), boundaries are multiples of keyWidth.
+        let blackKeyWidth = keyWidth * 0.6
+        return CGFloat(index + 1) * keyWidth - (blackKeyWidth / 2)
     }
 }
 
@@ -185,27 +176,29 @@ struct ArrowIndicator: View {
     let animate: Bool
     
     private var xPosition: CGFloat {
-        // Calculate position based on MIDI note
+        // Calculate position based on MIDI note using realistic spacing:
+        // - 14 equal-width white keys for two octaves (no gaps)
+        // - Black notes sit exactly on white-key boundaries
         let noteClass = midiNote % 12
         let octaveOffset = CGFloat((midiNote / 12) - 4) * 7 // Octaves from C4
         
         let positionMap: [Int: CGFloat] = [
-            0: 0.5,   // C
-            1: 0.85,  // C#
-            2: 1.5,   // D
-            3: 2.15,  // D#
-            4: 2.5,   // E
-            5: 3.5,   // F
-            6: 3.85,  // F#
-            7: 4.5,   // G
-            8: 5.15,  // G#
-            9: 5.5,   // A
-            10: 5.85, // A#
-            11: 6.5   // B
+            0: 0.5, // C
+            1: 1.0, // C# boundary
+            2: 1.5, // D
+            3: 2.0, // D# boundary
+            4: 2.5, // E
+            5: 3.5, // F
+            6: 4.0, // F# boundary
+            7: 4.5, // G
+            8: 5.0, // G# boundary
+            9: 5.5, // A
+            10: 6.0, // A# boundary
+            11: 6.5  // B
         ]
         
         let basePosition = positionMap[noteClass] ?? 0
-        let keyWidth = (keyboardWidth - 13) / 14
+        let keyWidth = (keyboardWidth) / 14
         return (basePosition + octaveOffset) * keyWidth
     }
     

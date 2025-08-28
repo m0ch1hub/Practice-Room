@@ -5,7 +5,7 @@ admin.initializeApp();
 
 const projectId = 'gen-lang-client-0477203387';  // Use project ID, not number
 const location = 'us-central1';
-const endpointId = '5817141089097744384';  // Practice Room endpoint
+const endpointId = '3813531836127117312';  // Tuned music theory model endpoint
 
 exports.musicTheoryChat = functions
   .runWith({ memory: '512MB', timeoutSeconds: 60 })
