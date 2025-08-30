@@ -135,8 +135,8 @@ class ChatService: ObservableObject {
         let token = try await Auth.auth().currentUser?.getIDToken()
         Logger.shared.api("Got ID token for backend call")
         
-        // Call Firebase Function via HTTP (using Google Cloud Function with tuned model)
-        let functionURL = "https://us-central1-gen-lang-client-0477203387.cloudfunctions.net/musicTheoryChat"
+        // Call Firebase Function via HTTP (using fine-tuned model endpoint)
+        let functionURL = "https://us-central1-practice-room-869ad.cloudfunctions.net/musicTheoryChat"
         guard let url = URL(string: functionURL) else {
             throw APIError.invalidURL
         }

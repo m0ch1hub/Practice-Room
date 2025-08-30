@@ -140,11 +140,41 @@ struct ChatView: View {
         
         switch example.type {
         case .chordProgression, .sequence:
-            let chords = MusicTheory.shared.parseChordProgression(example.content)
-            if chords.count > 1 {
-                soundEngine.playChordProgression(chords)
-            } else if let chord = chords.first {
-                soundEngine.playChord(chord)
+            // Handle MIDI format with pipes: MIDI:60,64,67|72,76,79:1.5s,2.0s
+            if example.content.hasPrefix("MIDI:") {
+                let midiContent = String(example.content.dropFirst(5)) // Remove "MIDI:"
+                let components = midiContent.components(separatedBy: ":")
+                
+                if components.count >= 2 {
+                    let notesStr = components[0]
+                    let durationsStr = components[1]
+                    
+                    // Parse note groups separated by pipes
+                    let noteGroups = notesStr.components(separatedBy: "|")
+                    let durations = durationsStr.components(separatedBy: ",").compactMap { 
+                        Double($0.replacingOccurrences(of: "s", with: "")) 
+                    }
+                    
+                    // Play each group sequentially
+                    var delay: TimeInterval = 0
+                    for (index, group) in noteGroups.enumerated() {
+                        let noteNumbers = group.components(separatedBy: ",").compactMap { Int($0) }
+                        let duration = index < durations.count ? durations[index] : 1.5
+                        
+                        DispatchQueue.main.asyncAfter(deadline: .now() + delay) {
+                            soundEngine.playChord(midiNotes: noteNumbers, duration: duration)
+                        }
+                        delay += duration
+                    }
+                }
+            } else {
+                // Original chord progression parsing
+                let chords = MusicTheory.shared.parseChordProgression(example.content)
+                if chords.count > 1 {
+                    soundEngine.playChordProgression(chords)
+                } else if let chord = chords.first {
+                    soundEngine.playChord(chord)
+                }
             }
             
         case .scale:
@@ -291,8 +321,8 @@ struct PlayButton: View {
 
 struct SuggestionChips: View {
     let suggestions = [
-        "What is a major chord?\nLearn the basics of chord construction",
-        "Explain the ii-V-I progression\nto understand jazz harmony"
+        "What is a major chord?",
+        "Explain the ii-V-I progression"
     ]
     
     var body: some View {
@@ -301,25 +331,13 @@ struct SuggestionChips: View {
                 Button(action: {
                     // Handle suggestion tap
                 }) {
-                    VStack(alignment: .leading) {
-                        let lines = suggestion.components(separatedBy: "\n")
-                        if lines.count > 1 {
-                            Text(lines[0])
-                                .font(.system(size: 16, weight: .medium))
-                                .foregroundColor(.primary)
-                            Text(lines[1])
-                                .font(.system(size: 14))
-                                .foregroundColor(.secondary)
-                        } else {
-                            Text(suggestion)
-                                .font(.system(size: 16, weight: .medium))
-                                .foregroundColor(.primary)
-                        }
-                    }
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .padding(16)
-                    .background(Color(.systemGray6))
-                    .cornerRadius(12)
+                    Text(suggestion)
+                        .font(.system(size: 16, weight: .medium))
+                        .foregroundColor(.primary)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .padding(16)
+                        .background(Color(.systemGray6))
+                        .cornerRadius(12)
                 }
                 .buttonStyle(PlainButtonStyle())
             }
@@ -632,6 +650,7 @@ struct FormattedSection {
     
     private func parseAudioMarker(_ marker: String) -> MusicalExample? {
         // Parse [AUDIO:MIDI:60:1.0s:Play Root Note (C)]
+        // Or [AUDIO:MIDI:60,64,67|72,76,79:1.0s,1.0s:Progression]
         let pattern = "\\[AUDIO:MIDI:([^:]+):([^:]+):([^\\]]+)\\]"
         let regex = try! NSRegularExpression(pattern: pattern, options: [])
         let range = NSRange(marker.startIndex..<marker.endIndex, in: marker)
@@ -649,7 +668,11 @@ struct FormattedSection {
             
             // Determine type from MIDI content
             let exampleType: MusicalExample.ExampleType
-            if midiNotes.contains(",") {
+            
+            // Check if it's a sequence (contains pipe separator)
+            if midiNotes.contains("|") {
+                exampleType = .chordProgression
+            } else if midiNotes.contains(",") {
                 if midiNotes.components(separatedBy: ",").count > 2 {
                     exampleType = .chord
                 } else {
@@ -672,22 +695,10 @@ struct FormattedSection {
 
 struct WelcomeView: View {
     var body: some View {
-        VStack(spacing: 24) {
-            VStack(spacing: 12) {
-                Image(systemName: "music.note.list")
-                    .font(.system(size: 48))
-                    .foregroundColor(.blue)
-                
-                Text("Music Theory Chat")
-                    .font(.system(size: 24, weight: .semibold))
-                    .foregroundColor(.primary)
-            }
-            
-            Text("Ask me about chords, scales, intervals, or any music theory concept. I can play examples to help you understand better.")
-                .font(.system(size: 16))
-                .foregroundColor(.secondary)
-                .multilineTextAlignment(.center)
-                .padding(.horizontal, 20)
+        VStack(spacing: 12) {
+            Image(systemName: "music.note.list")
+                .font(.system(size: 48))
+                .foregroundColor(.blue)
         }
         .padding(.top, 60)
     }

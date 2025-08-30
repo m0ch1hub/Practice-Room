@@ -5,7 +5,7 @@ admin.initializeApp();
 
 const projectId = 'gen-lang-client-0477203387';  // Use project ID, not number
 const location = 'us-central1';
-const endpointId = '3813531836127117312';  // Tuned music theory model endpoint
+const endpointId = '6709909346479767552';  // Fine-tuned music theory model endpoint (08/28/25)
 
 exports.musicTheoryChat = functions
   .runWith({ memory: '512MB', timeoutSeconds: 60 })
@@ -50,6 +50,11 @@ exports.musicTheoryChat = functions
       const endpointUrl = `https://${location}-aiplatform.googleapis.com/v1/projects/${projectId}/locations/${location}/endpoints/${endpointId}:generateContent`;
       
       const requestBody = {
+        systemInstruction: {
+          parts: [{
+            text: "You are a music teacher. Format your answers the same way as the fine-tuning data."
+          }]
+        },
         contents: [{
           role: "user",
           parts: [{text: message}]
