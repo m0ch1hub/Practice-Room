@@ -382,6 +382,9 @@ struct AudioPlayButton: View {
 // Enhanced Piano Keyboard View
 struct PianoKeyboardView: View {
     let highlightedNotes: Set<Int>
+    var startNote: Int = 72  // Default C5
+    var endNote: Int = 84    // Default C6
+    var scaleFactor: CGFloat = 1.0
     
     private let whiteKeyPositions = [0, 2, 4, 5, 7, 9, 11] // C, D, E, F, G, A, B
     // Black keys mapped to the white-key boundary they sit over (1-based)
@@ -395,51 +398,90 @@ struct PianoKeyboardView: View {
     
     var body: some View {
         GeometryReader { geometry in
-            // Equal white keys without gaps; black keys ~60% width, centered on boundaries
-            let whiteKeyWidth = geometry.size.width / 7
+            // Calculate number of keys to show
+            let totalKeys = endNote - startNote
+            let whiteKeyCount = countWhiteKeys(from: startNote, to: endNote)
+            
+            // Calculate key widths - just divide available width by number of white keys
+            let whiteKeyWidth = geometry.size.width / CGFloat(whiteKeyCount)
             let blackKeyWidth = whiteKeyWidth * 0.6
             
             ZStack(alignment: .topLeading) {
                 // White keys
                 HStack(spacing: 0) {
-                    ForEach(0..<7, id: \.self) { index in
-                        let noteNumber = 60 + whiteKeyPositions[index]
-                        let isHighlighted = highlightedNotes.contains(noteNumber)
+                    ForEach(startNote..<endNote, id: \.self) { noteNumber in
+                        if isWhiteKey(noteNumber) {
+                            let isHighlighted = highlightedNotes.contains(noteNumber)
                         
-                        RoundedRectangle(cornerRadius: 4)
-                            .fill(isHighlighted ? 
-                                  LinearGradient(colors: [Color.blue.opacity(0.8), Color.blue],
-                                               startPoint: .top, endPoint: .bottom) :
-                                  LinearGradient(colors: [Color.white, Color(.systemGray6)],
-                                               startPoint: .top, endPoint: .bottom))
-                            .overlay(
-                                RoundedRectangle(cornerRadius: 4)
-                                    .stroke(Color(.systemGray3), lineWidth: 0.5)
-                            )
-                            .shadow(color: isHighlighted ? .blue.opacity(0.5) : .black.opacity(0.1), 
-                                   radius: isHighlighted ? 8 : 2, y: 2)
-                            .frame(width: whiteKeyWidth)
+                            RoundedRectangle(cornerRadius: 4)
+                                .fill(isHighlighted ? 
+                                      LinearGradient(colors: [Color.blue.opacity(0.8), Color.blue],
+                                                   startPoint: .top, endPoint: .bottom) :
+                                      LinearGradient(colors: [Color.white, Color(.systemGray6)],
+                                                   startPoint: .top, endPoint: .bottom))
+                                .overlay(
+                                    RoundedRectangle(cornerRadius: 4)
+                                        .stroke(Color(.systemGray3), lineWidth: 0.5)
+                                )
+                                .shadow(color: isHighlighted ? .blue.opacity(0.5) : .black.opacity(0.1), 
+                                       radius: isHighlighted ? 8 : 2, y: 2)
+                                .frame(width: whiteKeyWidth)
+                        }
                     }
                 }
                 
-                // Black keys - positioned centered between white keys  
-                ForEach(blackKeyBoundaries, id: \.note) { key in
-                    let noteNumber = 60 + key.note
-                    let isHighlighted = highlightedNotes.contains(noteNumber)
-                    
-                    RoundedRectangle(cornerRadius: 2)
-                        .fill(isHighlighted ?
-                              LinearGradient(colors: [Color.blue, Color.blue.opacity(0.6)],
-                                           startPoint: .top, endPoint: .bottom) :
-                              LinearGradient(colors: [Color.black, Color(.systemGray2)],
-                                           startPoint: .top, endPoint: .bottom))
-                        .frame(width: blackKeyWidth, height: geometry.size.height * 0.6)
-                        .offset(x: (CGFloat(key.boundary) * whiteKeyWidth) - (blackKeyWidth / 2))
-                        .shadow(color: isHighlighted ? .blue.opacity(0.6) : .black.opacity(0.3), 
-                               radius: isHighlighted ? 2 : 1, y: 1)
+                // Black keys
+                ForEach(startNote..<endNote, id: \.self) { noteNumber in
+                    if isBlackKey(noteNumber) {
+                        let isHighlighted = highlightedNotes.contains(noteNumber)
+                        let xPosition = calculateBlackKeyPosition(noteNumber, whiteKeyWidth: whiteKeyWidth)
+                        
+                        RoundedRectangle(cornerRadius: 2)
+                            .fill(isHighlighted ?
+                                  LinearGradient(colors: [Color.blue, Color.blue.opacity(0.6)],
+                                               startPoint: .top, endPoint: .bottom) :
+                                  LinearGradient(colors: [Color.black, Color(.systemGray2)],
+                                               startPoint: .top, endPoint: .bottom))
+                            .frame(width: blackKeyWidth, height: geometry.size.height * 0.6)
+                            .offset(x: xPosition)
+                            .shadow(color: isHighlighted ? .blue.opacity(0.6) : .black.opacity(0.3), 
+                                   radius: isHighlighted ? 2 : 1, y: 1)
+                    }
                 }
             }
         }
+    }
+    
+    // Helper functions
+    private func isWhiteKey(_ midi: Int) -> Bool {
+        let noteClass = midi % 12
+        return whiteKeyPositions.contains(noteClass)
+    }
+    
+    private func isBlackKey(_ midi: Int) -> Bool {
+        !isWhiteKey(midi)
+    }
+    
+    private func countWhiteKeys(from start: Int, to end: Int) -> Int {
+        var count = 0
+        for note in start..<end {
+            if isWhiteKey(note) {
+                count += 1
+            }
+        }
+        return count
+    }
+    
+    private func calculateBlackKeyPosition(_ midi: Int, whiteKeyWidth: CGFloat) -> CGFloat {
+        // Calculate position based on which white keys come before this black key
+        var whiteKeysBefore = 0
+        for note in startNote..<midi {
+            if isWhiteKey(note) {
+                whiteKeysBefore += 1
+            }
+        }
+        // Position black key between white keys
+        return CGFloat(whiteKeysBefore) * whiteKeyWidth - whiteKeyWidth * 0.3
     }
 }
 

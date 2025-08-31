@@ -23,6 +23,9 @@ struct AudioExample: Identifiable {
     let duration: TimeInterval
     let description: String
     let isSequential: Bool // true if notes play in sequence (|), false if together (,)
+    let isChordProgression: Bool // true if this represents multiple chords
+    let chords: [[Int]]? // For chord progressions, each array is a chord
+    let durations: [TimeInterval]? // Multiple durations for ritardando or chord timing
 }
 
 // MARK: - Training Data Parser
@@ -105,31 +108,63 @@ class TrainingDataLoader: ObservableObject {
     }
     
     private func parseAudioData(_ data: String) -> AudioExample? {
-        // Format: "60,64,67:2.0s:Description" or "60|64|67:2.0s:Description"
+        // Format: "60,64,67:2.0s:Description" or "60|64|67:2.0s:Description" 
+        // or chord progression: "60,64,67|72,76,79:1.0s,1.5s:Description"
         let parts = data.split(separator: ":")
         guard parts.count >= 2 else { return nil }
         
         let noteString = String(parts[0])
-        let isSequential = noteString.contains("|")
-        
-        // Parse notes
-        let separator = isSequential ? "|" : ","
-        let midiNotes = noteString.split(separator: Character(separator))
-            .compactMap { Int($0.trimmingCharacters(in: .whitespaces)) }
-        
-        // Parse duration
-        let durationString = String(parts[1]).replacingOccurrences(of: "s", with: "")
-        let duration = Double(durationString) ?? 1.0
-        
-        // Parse description (if exists)
+        let durationString = String(parts[1])
         let description = parts.count > 2 ? String(parts[2]) : ""
         
-        return AudioExample(
-            midiNotes: midiNotes,
-            duration: duration,
-            description: description,
-            isSequential: isSequential
-        )
+        // Check if this is a chord progression (contains both | and ,)
+        let isChordProgression = noteString.contains("|") && noteString.contains(",")
+        
+        // Parse durations (can be multiple)
+        let durationComponents = durationString.split(separator: ",")
+        let durations = durationComponents.compactMap { component -> TimeInterval? in
+            let cleanDuration = component.trimmingCharacters(in: .whitespaces)
+                .replacingOccurrences(of: "s", with: "")
+            return Double(cleanDuration)
+        }
+        
+        if isChordProgression {
+            // Parse as chord progression
+            let chordStrings = noteString.split(separator: "|")
+            let chords = chordStrings.map { chordString -> [Int] in
+                chordString.split(separator: ",")
+                    .compactMap { Int($0.trimmingCharacters(in: .whitespaces)) }
+            }
+            
+            // Flatten for backward compatibility
+            let allNotes = chords.flatMap { $0 }
+            
+            return AudioExample(
+                midiNotes: allNotes,
+                duration: durations.first ?? 1.0,
+                description: description,
+                isSequential: true, // Chord progressions play sequentially
+                isChordProgression: true,
+                chords: chords,
+                durations: durations.count > 1 ? durations : nil
+            )
+        } else {
+            // Original parsing logic
+            let isSequential = noteString.contains("|")
+            let separator = isSequential ? "|" : ","
+            let midiNotes = noteString.split(separator: Character(separator))
+                .compactMap { Int($0.trimmingCharacters(in: .whitespaces)) }
+            
+            return AudioExample(
+                midiNotes: midiNotes,
+                duration: durations.first ?? 1.0,
+                description: description,
+                isSequential: isSequential,
+                isChordProgression: false,
+                chords: nil,
+                durations: durations.count > 1 ? durations : nil
+            )
+        }
     }
     
     private func removeAudioTags(from text: String) -> String {
@@ -151,19 +186,45 @@ struct MomentBasedLessonView: View {
     @StateObject private var soundEngine = SoundEngine.shared
     @State private var currentMomentIndex = 0
     @State private var isPlayingAudio = false
+    @State private var showPlayButton = false
     @State private var showCheckmark = false
     @State private var highlightedNotes: Set<Int> = []
     @State private var selectedQuestionIndex = 0
     @State private var showQuestionSelector = false
     @Binding var isPresented: Bool
     
-    // Timer for reading delay and audio playback
-    @State private var readingTimer: Timer?
+    // Timer for audio playback duration
     @State private var audioTimer: Timer?
+    @State private var readingTimer: Timer?
+    
+    // Keyboard display parameters
+    @State private var keyboardStartNote: Int = 72  // Default C5
+    @State private var keyboardEndNote: Int = 84    // Default C6 (one octave)
+    @State private var keyboardScaleFactor: CGFloat = 1.0
     
     var currentMoment: Moment? {
         guard currentMomentIndex < dataLoader.moments.count else { return nil }
         return dataLoader.moments[currentMomentIndex]
+    }
+    
+    var buttonIconName: String {
+        if showCheckmark {
+            return "checkmark.circle.fill"
+        } else if showPlayButton {
+            return "play.circle.fill"
+        } else {
+            return "circle"
+        }
+    }
+    
+    var buttonColor: Color {
+        if showCheckmark {
+            return .green
+        } else if showPlayButton {
+            return .blue
+        } else {
+            return .gray
+        }
     }
     
     var body: some View {
@@ -210,10 +271,15 @@ struct MomentBasedLessonView: View {
                     Spacer()
                     
                     // Fixed Piano Keyboard (always visible)
-                    PianoKeyboardView(highlightedNotes: highlightedNotes)
-                        .frame(height: 120)
-                        .padding(.horizontal, 40)
-                        .padding(.bottom, 20)
+                    PianoKeyboardView(
+                        highlightedNotes: highlightedNotes,
+                        startNote: keyboardStartNote,
+                        endNote: keyboardEndNote,
+                        scaleFactor: keyboardScaleFactor
+                    )
+                    .frame(height: 120)
+                    .padding(.horizontal, 10)  // Much less padding for wider keyboard
+                    .padding(.bottom, 20)
                 }
                 
                 // Bottom Control Bar
@@ -259,9 +325,9 @@ struct MomentBasedLessonView: View {
                         
                         // Play/Next Button
                         Button(action: handleActionButton) {
-                            Image(systemName: showCheckmark ? "checkmark.circle.fill" : "play.circle.fill")
+                            Image(systemName: buttonIconName)
                                 .font(.system(size: 32))
-                                .foregroundColor(showCheckmark ? .green : .blue)
+                                .foregroundColor(buttonColor)
                         }
                         .disabled(isPlayingAudio)
                     }
@@ -308,9 +374,9 @@ struct MomentBasedLessonView: View {
         if showCheckmark {
             // Move to next moment
             nextMoment()
-        } else if !dataLoader.moments.isEmpty {
-            // Start the first moment
-            startMoment()
+        } else if showPlayButton {
+            // Play audio for current moment
+            playMomentAudio()
         }
     }
     
@@ -320,15 +386,76 @@ struct MomentBasedLessonView: View {
         // Clear previous state
         highlightedNotes.removeAll()
         showCheckmark = false
+        showPlayButton = true  // Show play button immediately
         isPlayingAudio = false
         
         // Cancel any existing timers
         readingTimer?.invalidate()
         audioTimer?.invalidate()
         
-        // Start reading delay, then play audio
-        readingTimer = Timer.scheduledTimer(withTimeInterval: moment.readingTime, repeats: false) { _ in
-            playMomentAudio()
+        // Calculate keyboard parameters for this moment
+        calculateKeyboardParameters(for: moment)
+    }
+    
+    private func calculateKeyboardParameters(for moment: Moment) {
+        // Collect all notes that will be played in this moment
+        var allNotes: Set<Int> = []
+        for example in moment.audioExamples {
+            allNotes.formUnion(example.midiNotes)
+        }
+        
+        guard !allNotes.isEmpty else {
+            // No notes, keep default
+            keyboardStartNote = 72  // C5
+            keyboardEndNote = 84    // C6
+            keyboardScaleFactor = 1.0
+            return
+        }
+        
+        let lowestNote = allNotes.min()!
+        let highestNote = allNotes.max()!
+        let range = highestNote - lowestNote + 1
+        
+        // Default C5-C6 octave range
+        let defaultStart = 72
+        let defaultEnd = 84
+        
+        if range <= 12 {
+            // Can fit in standard 12-key view
+            
+            // Check if it fits in default C5-C6 range
+            if lowestNote >= defaultStart && highestNote < defaultEnd {
+                // Fits in default range, use it
+                keyboardStartNote = defaultStart
+                keyboardEndNote = defaultEnd
+                keyboardScaleFactor = 1.0
+            } else {
+                // Needs shifting, start from lowest note
+                keyboardStartNote = lowestNote
+                keyboardEndNote = lowestNote + 12
+                keyboardScaleFactor = 1.0
+            }
+        } else {
+            // Needs more than 12 keys - don't scale down, just show more keys
+            let keysNeeded = range
+            
+            if keysNeeded <= 24 {
+                // Show all keys, normal size
+                keyboardStartNote = lowestNote
+                keyboardEndNote = highestNote + 1
+                keyboardScaleFactor = 1.0  // Don't scale down
+            } else if keysNeeded <= 36 {
+                // Show all keys, normal size
+                keyboardStartNote = lowestNote
+                keyboardEndNote = highestNote + 1
+                keyboardScaleFactor = 1.0  // Don't scale down
+            } else {
+                // Too many keys - show the most important 36
+                let center = (lowestNote + highestNote) / 2
+                keyboardStartNote = center - 18
+                keyboardEndNote = center + 18
+                keyboardScaleFactor = 1.0  // Don't scale down
+            }
         }
     }
     
@@ -336,32 +463,109 @@ struct MomentBasedLessonView: View {
         guard let moment = currentMoment else { return }
         
         isPlayingAudio = true
+        showPlayButton = false  // Hide play button while playing
         
         // Play all audio examples in the moment
         var totalDuration: TimeInterval = 0
         
         for example in moment.audioExamples {
-            // Highlight notes
-            highlightedNotes.formUnion(example.midiNotes)
+            // Don't highlight all notes at once - let playAudioExample handle progressive highlighting
             
-            // Play audio (integrate with your sound engine here)
+            // Play audio (this will handle highlighting)
             playAudioExample(example)
             
-            totalDuration += example.duration
+            // Calculate actual duration
+            if example.isChordProgression {
+                // Sum up all chord durations
+                if let durations = example.durations {
+                    totalDuration += durations.reduce(0, +)
+                } else if let chords = example.chords {
+                    // Use default duration for each chord
+                    totalDuration += Double(chords.count) * example.duration
+                }
+            } else if example.isSequential {
+                if let durations = example.durations {
+                    // For ritardando: sum up individual note durations with overlap
+                    totalDuration += durations.reduce(0, +) * 0.8
+                } else {
+                    // Fixed delay between notes
+                    let noteDelay = 0.3
+                    totalDuration += Double(example.midiNotes.count - 1) * noteDelay + example.duration
+                }
+            } else {
+                // Simultaneous notes: just the duration
+                totalDuration += example.duration
+            }
         }
         
-        // After all audio finishes, show checkmark
+        // After all audio finishes, clear highlights and show checkmark
         audioTimer = Timer.scheduledTimer(withTimeInterval: totalDuration, repeats: false) { _ in
             isPlayingAudio = false
+            highlightedNotes.removeAll() // Clear all highlights when audio completes
             showCheckmark = true
         }
     }
     
     private func playAudioExample(_ example: AudioExample) {
-        // Convert MIDI to notes and play
-        for midiNote in example.midiNotes {
-            // Use the playNote method that takes MIDI directly
-            soundEngine.playNote(midiNote: midiNote, duration: example.duration)
+        if example.isChordProgression, let chords = example.chords {
+            // Play chord progression
+            var delay: TimeInterval = 0
+            for (index, chord) in chords.enumerated() {
+                // Get duration for this chord
+                let chordDuration: TimeInterval
+                if let durations = example.durations, index < durations.count {
+                    chordDuration = durations[index]
+                } else {
+                    chordDuration = example.duration
+                }
+                
+                // Schedule this chord
+                DispatchQueue.main.asyncAfter(deadline: .now() + delay) {
+                    // Clear previous highlights and show only this chord
+                    highlightedNotes = Set(chord)
+                    
+                    // Play all notes in the chord simultaneously
+                    for midiNote in chord {
+                        soundEngine.playNote(midiNote: midiNote, duration: chordDuration)
+                    }
+                }
+                
+                // Add delay for next chord
+                delay += chordDuration
+            }
+        } else if example.isSequential {
+            // Play notes in sequence
+            if let durations = example.durations {
+                // Use individual durations for each note (for ritardando effect)
+                var delay: TimeInterval = 0
+                for (index, midiNote) in example.midiNotes.enumerated() {
+                    let noteDuration = index < durations.count ? durations[index] : example.duration
+                    
+                    DispatchQueue.main.asyncAfter(deadline: .now() + delay) {
+                        // Clear previous highlights and show only this note
+                        highlightedNotes = Set([midiNote])
+                        soundEngine.playNote(midiNote: midiNote, duration: noteDuration)
+                    }
+                    
+                    delay += noteDuration * 0.8 // Slight overlap for smoother transitions
+                }
+            } else {
+                // Use fixed delay between notes
+                let noteDelay = 0.3
+                for (index, midiNote) in example.midiNotes.enumerated() {
+                    DispatchQueue.main.asyncAfter(deadline: .now() + Double(index) * noteDelay) {
+                        // Clear previous highlights and show only this note
+                        highlightedNotes = Set([midiNote])
+                        soundEngine.playNote(midiNote: midiNote, duration: example.duration)
+                    }
+                }
+            }
+        } else {
+            // Play notes simultaneously (chord) - replace all highlights
+            highlightedNotes = Set(example.midiNotes)
+            for midiNote in example.midiNotes {
+                soundEngine.playNote(midiNote: midiNote, duration: example.duration)
+            }
         }
     }
     
@@ -369,6 +573,7 @@ struct MomentBasedLessonView: View {
         // Clear highlights
         highlightedNotes.removeAll()
         showCheckmark = false
+        showPlayButton = false
         
         // Move to next moment
         if currentMomentIndex < dataLoader.moments.count - 1 {
