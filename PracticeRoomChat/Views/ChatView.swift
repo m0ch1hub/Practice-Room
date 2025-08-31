@@ -123,7 +123,7 @@ struct ChatView: View {
         }
         .background(Color(.systemBackground))
         .fullScreenCover(isPresented: $showSlidesView) {
-            MusicLessonSlidesView(isPresented: $showSlidesView)
+            MomentBasedLessonView(isPresented: $showSlidesView)
         }
     }
     

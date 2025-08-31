@@ -1,0 +1,82 @@
+import Foundation
+
+/// Centralized manager for loading training data
+/// Handles both development (direct file access) and production (bundle resource) scenarios
+class TrainingDataManager {
+    static let shared = TrainingDataManager()
+    
+    private init() {}
+    
+    /// Gets the URL for the training data file
+    /// In development (simulator), tries to load from project directory first
+    /// In production (device), loads from bundle resources
+    func getTrainingDataURL() -> URL? {
+        // Development path - when running in simulator, load directly from project
+        #if targetEnvironment(simulator)
+        let projectPath = "/Users/mochi/Documents/Practice Room Chat/PracticeRoomChat/Training Data/training_data.jsonl"
+        let developmentURL = URL(fileURLWithPath: projectPath)
+        
+        if FileManager.default.fileExists(atPath: projectPath) {
+            print("Loading training data from development path: \(projectPath)")
+            return developmentURL
+        }
+        #endif
+        
+        // Production path - load from bundle
+        // First try with folder structure
+        if let bundleURL = Bundle.main.url(forResource: "Training Data/training_data", withExtension: "jsonl") {
+            print("Loading training data from bundle with folder: Training Data/training_data.jsonl")
+            return bundleURL
+        }
+        
+        // Try without folder (if file was added directly to bundle)
+        if let bundleURL = Bundle.main.url(forResource: "training_data", withExtension: "jsonl") {
+            print("Loading training data from bundle root: training_data.jsonl")
+            return bundleURL
+        }
+        
+        print("Training data file not found in any location")
+        return nil
+    }
+    
+    /// Loads training data as a string
+    func loadTrainingDataString() throws -> String {
+        guard let url = getTrainingDataURL() else {
+            throw TrainingDataError.fileNotFound
+        }
+        
+        return try String(contentsOf: url, encoding: .utf8)
+    }
+    
+    /// Loads and parses training data into TrainingExample objects
+    func loadTrainingExamples() -> [TrainingExample] {
+        var examples: [TrainingExample] = []
+        
+        do {
+            let dataString = try loadTrainingDataString()
+            let lines = dataString.components(separatedBy: .newlines)
+            
+            for line in lines where !line.isEmpty {
+                if let jsonData = line.data(using: .utf8),
+                   let example = try? JSONDecoder().decode(TrainingExample.self, from: jsonData) {
+                    examples.append(example)
+                }
+            }
+        } catch {
+            print("Error loading training examples: \(error)")
+        }
+        
+        return examples
+    }
+}
+
+enum TrainingDataError: LocalizedError {
+    case fileNotFound
+    
+    var errorDescription: String? {
+        switch self {
+        case .fileNotFound:
+            return "Training data file not found. Please ensure training_data.jsonl is included in the project."
+        }
+    }
+}
