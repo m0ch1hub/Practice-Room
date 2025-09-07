@@ -1,11 +1,17 @@
 import SwiftUI
 
+// MARK: - Minimal MIDI keyboard
+// Rationale: The previous keyboard used gradients, shadows and animated
+// indicators. That looked playful but also busy. This version intentionally
+// opts for a flat, minimal design that reads clearly in both light and dark
+// modes, without ornamental effects. We keep the same pitch layout so the rest
+// of the app (highlight logic, note math) continues to work unchanged.
 struct MidiKeyboardView: View {
     let midiNotes: [Int]
     let showLabels: Bool
-    @State private var animateArrows = false
+    let octaves: Int
     
-    init(midiContent: String, showLabels: Bool = true) {
+    init(midiContent: String, showLabels: Bool = true, octaves: Int = 1) {
         // Parse MIDI:60,64,67:2.0s format
         if midiContent.hasPrefix("MIDI:") {
             let components = midiContent.dropFirst(5).components(separatedBy: ":")
@@ -18,101 +24,71 @@ struct MidiKeyboardView: View {
             self.midiNotes = []
         }
         self.showLabels = showLabels
+        self.octaves = max(1, octaves)
     }
     
-    init(midiNotes: [Int], showLabels: Bool = true) {
+    init(midiNotes: [Int], showLabels: Bool = true, octaves: Int = 1) {
         self.midiNotes = midiNotes
         self.showLabels = showLabels
+        self.octaves = max(1, octaves)
     }
     
     var body: some View {
-        VStack(spacing: 0) {
-            // Arrows pointing to active notes
-            GeometryReader { geometry in
-                ZStack {
-                    ForEach(midiNotes, id: \.self) { note in
-                        ArrowIndicator(
-                            midiNote: note,
-                            keyboardWidth: geometry.size.width,
-                            animate: animateArrows
+        // Only the keyboard itself; no surrounding card or animated arrows.
+        GeometryReader { geometry in
+            ZStack(alignment: .topLeading) {
+                // White keys row
+                HStack(spacing: 0) {
+                    ForEach(0..<(octaves * 7), id: \.self) { index in
+                        WhiteKey(
+                            noteNumber: whiteKeyMidiNumber(for: index),
+                            isHighlighted: midiNotes.contains(whiteKeyMidiNumber(for: index)),
+                            showLabel: showLabels,
+                            width: geometry.size.width / CGFloat(octaves * 7)
                         )
                     }
                 }
-            }
-            .frame(height: 30)
-            
-            // Keyboard
-            GeometryReader { geometry in
-                ZStack(alignment: .bottom) {
-                    // White keys
-                    HStack(spacing: 0) {
-                        ForEach(0..<14, id: \.self) { index in
-                            WhiteKey(
-                                noteNumber: whiteKeyMidiNumber(for: index),
-                                isHighlighted: midiNotes.contains(whiteKeyMidiNumber(for: index)),
-                                showLabel: showLabels,
-                                width: (geometry.size.width) / 14
+                
+                // Black keys overlayed above the whites
+                ZStack(alignment: .topLeading) {
+                    ForEach(0..<(octaves * 7), id: \.self) { index in
+                        if shouldShowBlackKey(afterWhiteIndex: index) {
+                            BlackKey(
+                                noteNumber: blackKeyMidiNumber(afterWhiteIndex: index),
+                                isHighlighted: midiNotes.contains(blackKeyMidiNumber(afterWhiteIndex: index)),
+                                width: geometry.size.width / CGFloat(octaves * 7) * 0.6,
+                                height: geometry.size.height * 0.64
                             )
-                        }
-                    }
-                    
-                    // Black keys
-                    HStack(spacing: 0) {
-                        ForEach(0..<14, id: \.self) { index in
-                            if shouldShowBlackKey(at: index) {
-                                BlackKey(
-                                    noteNumber: blackKeyMidiNumber(for: index),
-                                    isHighlighted: midiNotes.contains(blackKeyMidiNumber(for: index)),
-                                    width: (geometry.size.width) / 14 * 0.6,
-                                    height: geometry.size.height * 0.6
-                                )
-                                .offset(x: blackKeyOffset(for: index, keyWidth: (geometry.size.width) / 14))
-                            }
+                            .offset(x: blackKeyOffset(afterWhiteIndex: index, keyWidth: geometry.size.width / CGFloat(octaves * 7)))
                         }
                     }
                 }
             }
-            .frame(height: 80)
         }
-        .onAppear {
-            withAnimation(.easeInOut(duration: 0.5).repeatForever(autoreverses: true)) {
-                animateArrows = true
-            }
-        }
+        .frame(height: 100)
     }
     
     private func whiteKeyMidiNumber(for index: Int) -> Int {
         let whiteKeyPattern = [0, 2, 4, 5, 7, 9, 11] // C, D, E, F, G, A, B
-        let octave = (index / 7) + 4 // Start from C4
+        // MIDI 60 = C4, so we want octave 5 in MIDI numbering (60/12 = 5)
+        let octave = 5 // This gives us C4 (60) to B4 (71)
         let noteInOctave = whiteKeyPattern[index % 7]
         return (octave * 12) + noteInOctave
     }
     
-    private func blackKeyMidiNumber(for index: Int) -> Int {
-        let blackKeyMap: [Int: Int] = [
-            0: 61,  // C#4
-            1: 63,  // D#4
-            3: 66,  // F#4
-            4: 68,  // G#4
-            5: 70,  // A#4
-            7: 73,  // C#5
-            8: 75,  // D#5
-            10: 78, // F#5
-            11: 80, // G#5
-            12: 82  // A#5
-        ]
-        return blackKeyMap[index] ?? 0
+    private func blackKeyMidiNumber(afterWhiteIndex index: Int) -> Int {
+        // Black key after a given white key is one semitone up
+        return whiteKeyMidiNumber(for: index) + 1
     }
     
-    private func shouldShowBlackKey(at index: Int) -> Bool {
-        let pattern = [true, true, false, true, true, true, false] // C#, D#, skip, F#, G#, A#, skip
-        if index >= 14 { return false }
-        return pattern[index % 7] && index != 2 && index != 6 && index != 9 && index != 13
+    private func shouldShowBlackKey(afterWhiteIndex index: Int) -> Bool {
+        // Show black keys after C, D, F, G, A within each octave
+        let pos = index % 7
+        return pos == 0 || pos == 1 || pos == 3 || pos == 4 || pos == 5
     }
     
-    private func blackKeyOffset(for index: Int, keyWidth: CGFloat) -> CGFloat {
-        // Place each black key centered on the boundary after the white key at `index`.
-        // With realistic spacing (no gaps), boundaries are multiples of keyWidth.
+    private func blackKeyOffset(afterWhiteIndex index: Int, keyWidth: CGFloat) -> CGFloat {
+        // Centered on the boundary to the right of the white key at `index`
         let blackKeyWidth = keyWidth * 0.6
         return CGFloat(index + 1) * keyWidth - (blackKeyWidth / 2)
     }
@@ -132,24 +108,28 @@ struct WhiteKey: View {
     }
     
     var body: some View {
-        VStack {
-            Spacer()
-            if showLabel && noteNumber % 12 == 0 { // Show C labels
+        // Flat white key with a subtle outline. If highlighted, we tint the
+        // key with a light accent overlay. We only label the C keys to avoid
+        // visual noise.
+        ZStack(alignment: .bottom) {
+            RoundedRectangle(cornerRadius: 3)
+                .fill(Color.white)
+                .overlay(
+                    RoundedRectangle(cornerRadius: 3)
+                        .stroke(Color.gray.opacity(0.35), lineWidth: 0.6)
+                )
+                .overlay(
+                    RoundedRectangle(cornerRadius: 3)
+                        .fill(Color.blue.opacity(isHighlighted ? 0.18 : 0.0))
+                )
+            if showLabel && noteNumber % 12 == 0 { // Only show C labels
                 Text("C\(noteNumber / 12 - 1)")
-                    .font(.system(size: 10))
-                    .foregroundColor(isHighlighted ? .white : .gray)
-                    .padding(.bottom, 4)
+                    .font(.system(size: 10, weight: .medium))
+                    .foregroundColor(isHighlighted ? Color.blue : .secondary)
+                    .padding(.bottom, 6)
             }
         }
         .frame(width: width)
-        .background(
-            RoundedRectangle(cornerRadius: 2)
-                .fill(isHighlighted ? Color.blue : Color.white)
-                .overlay(
-                    RoundedRectangle(cornerRadius: 2)
-                        .stroke(Color.gray, lineWidth: 0.5)
-                )
-        )
     }
 }
 
@@ -160,68 +140,20 @@ struct BlackKey: View {
     let height: CGFloat
     
     var body: some View {
-        Rectangle()
-            .fill(isHighlighted ? Color.blue.opacity(0.8) : Color.black)
+        RoundedRectangle(cornerRadius: 2)
+            .fill(Color.black)
             .frame(width: width, height: height)
             .overlay(
-                Rectangle()
-                    .stroke(Color.gray, lineWidth: 0.5)
+                RoundedRectangle(cornerRadius: 2)
+                    .stroke(Color.black.opacity(0.8), lineWidth: 0.6)
+            )
+            .overlay(
+                RoundedRectangle(cornerRadius: 2)
+                    .fill(Color.blue.opacity(isHighlighted ? 0.22 : 0.0))
             )
     }
 }
 
-struct ArrowIndicator: View {
-    let midiNote: Int
-    let keyboardWidth: CGFloat
-    let animate: Bool
-    
-    private var xPosition: CGFloat {
-        // Calculate position based on MIDI note using realistic spacing:
-        // - 14 equal-width white keys for two octaves (no gaps)
-        // - Black notes sit exactly on white-key boundaries
-        let noteClass = midiNote % 12
-        let octaveOffset = CGFloat((midiNote / 12) - 4) * 7 // Octaves from C4
-        
-        let positionMap: [Int: CGFloat] = [
-            0: 0.5, // C
-            1: 1.0, // C# boundary
-            2: 1.5, // D
-            3: 2.0, // D# boundary
-            4: 2.5, // E
-            5: 3.5, // F
-            6: 4.0, // F# boundary
-            7: 4.5, // G
-            8: 5.0, // G# boundary
-            9: 5.5, // A
-            10: 6.0, // A# boundary
-            11: 6.5  // B
-        ]
-        
-        let basePosition = positionMap[noteClass] ?? 0
-        let keyWidth = (keyboardWidth) / 14
-        return (basePosition + octaveOffset) * keyWidth
-    }
-    
-    var body: some View {
-        VStack(spacing: 2) {
-            Image(systemName: "arrowtriangle.down.fill")
-                .font(.system(size: 14))
-                .foregroundColor(.blue)
-                .scaleEffect(animate ? 1.2 : 1.0)
-            
-            Text(noteName)
-                .font(.system(size: 10, weight: .bold))
-                .foregroundColor(.blue)
-        }
-        .position(x: xPosition, y: 15)
-    }
-    
-    private var noteName: String {
-        let names = ["C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"]
-        let octave = midiNote / 12 - 1
-        return "\(names[midiNote % 12])\(octave)"
-    }
-}
 
 #Preview {
     VStack(spacing: 20) {

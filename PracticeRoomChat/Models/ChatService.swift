@@ -51,12 +51,16 @@ class ChatService: ObservableObject {
     @Published var messages: [ChatMessage] = []
     @Published var isLoading = false
     @Published var selectedModel: AIModel = .tunedModel
+    @Published var useTestingMode = true // Enable testing mode by default for now
     
     private let authService: ServiceAccountAuth
     private lazy var functions = Functions.functions()
+    private var trainingExamples: [TrainingExample] = []
     
     init(authService: ServiceAccountAuth) {
         self.authService = authService
+        // Load training examples for testing mode
+        self.trainingExamples = TrainingDataManager.shared.loadTrainingExamples()
         // Sign in anonymously when service initializes
         Task {
             try? await Auth.auth().signInAnonymously()
@@ -117,8 +121,37 @@ class ChatService: ObservableObject {
     }
     
     func callVertexAI(message: String) async throws -> ChatMessage {
-        // Always use Firebase backend
-        return try await callBackendAPI(message: message)
+        if useTestingMode {
+            // Use local training data for testing
+            return getTestResponse(for: message)
+        } else {
+            // Use Firebase backend
+            return try await callBackendAPI(message: message)
+        }
+    }
+    
+    private func getTestResponse(for message: String) -> ChatMessage {
+        // Find matching training example
+        for example in trainingExamples {
+            if let userContent = example.contents.first(where: { $0.role == "user" }),
+               let userText = userContent.parts.first?.text,
+               userText.lowercased().contains(message.lowercased()) || 
+               message.lowercased().contains(userText.lowercased()) {
+                
+                // Return the model's response
+                if let modelContent = example.contents.first(where: { $0.role == "model" }),
+                   let responseText = modelContent.parts.first?.text {
+                    return ChatMessage(role: "assistant", content: responseText, examples: [])
+                }
+            }
+        }
+        
+        // Default response if no match found
+        return ChatMessage(
+            role: "assistant",
+            content: "I don't have a response for that question yet. Try asking 'What is a major chord?'",
+            examples: []
+        )
     }
     
     private func callBackendAPI(message: String) async throws -> ChatMessage {

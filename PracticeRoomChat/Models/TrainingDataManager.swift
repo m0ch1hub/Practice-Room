@@ -1,5 +1,19 @@
 import Foundation
 
+// MARK: - Data Models
+struct TrainingExample: Codable {
+    struct Content: Codable {
+        let role: String
+        let parts: [Part]
+    }
+    
+    struct Part: Codable {
+        let text: String
+    }
+    
+    let contents: [Content]
+}
+
 /// Centralized manager for loading training data
 /// Handles both development (direct file access) and production (bundle resource) scenarios
 class TrainingDataManager {
@@ -13,6 +27,16 @@ class TrainingDataManager {
     func getTrainingDataURL() -> URL? {
         // Development path - when running in simulator, load directly from project
         #if targetEnvironment(simulator)
+        // Try simple training data first
+        let simpleProjectPath = "/Users/mochi/Documents/Practice Room Chat/PracticeRoomChat/Training Data/simple_training_data.jsonl"
+        let simpleURL = URL(fileURLWithPath: simpleProjectPath)
+        
+        if FileManager.default.fileExists(atPath: simpleProjectPath) {
+            print("Loading simple training data from development path: \(simpleProjectPath)")
+            return simpleURL
+        }
+        
+        // Fall back to original training data
         let projectPath = "/Users/mochi/Documents/Practice Room Chat/PracticeRoomChat/Training Data/training_data.jsonl"
         let developmentURL = URL(fileURLWithPath: projectPath)
         

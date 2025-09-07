@@ -8,21 +8,9 @@
 import SwiftUI
 
 struct ContentView: View {
-    @State private var showingTestingMode = false
-    
     var body: some View {
         NavigationView {
             ChatView()
-                .navigationBarItems(trailing: Button(action: {
-                    showingTestingMode = true
-                }) {
-                    Image(systemName: "testtube.2")
-                        .font(.title2)
-                        .foregroundColor(.blue)
-                })
-        }
-        .sheet(isPresented: $showingTestingMode) {
-            TestingModeView()
         }
     }
 }
