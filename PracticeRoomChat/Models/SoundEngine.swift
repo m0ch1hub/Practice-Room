@@ -185,5 +185,43 @@ class SoundEngine: ObservableObject {
         }
     }
     
+    // MARK: - Unified Timed Event System
+    struct NoteEvent {
+        let note: Int          // MIDI note number
+        let startTime: Double  // When to start (in seconds from beginning)
+        let duration: Double   // How long to play (in seconds)
+        let velocity: UInt8    // Volume/intensity (0-127)
+        
+        init(note: Int, startTime: Double, duration: Double, velocity: UInt8 = 80) {
+            self.note = note
+            self.startTime = startTime
+            self.duration = duration
+            self.velocity = velocity
+        }
+    }
     
+    /// Play a sequence of timed note events - handles everything from single notes to full songs
+    func playTimedSequence(_ events: [NoteEvent]) {
+        Logger.shared.audio("Playing timed sequence with \(events.count) events")
+        
+        for event in events {
+            // Schedule note to start
+            DispatchQueue.main.asyncAfter(deadline: .now() + event.startTime) { [weak self] in
+                self?.sampler.startNote(UInt8(event.note), withVelocity: event.velocity, onChannel: 0)
+                
+                // Schedule note to stop
+                DispatchQueue.main.asyncAfter(deadline: .now() + event.duration) { [weak self] in
+                    self?.sampler.stopNote(UInt8(event.note), onChannel: 0)
+                }
+            }
+        }
+    }
+    
+    /// Convenience method to convert old format to new
+    func playChordAsSequence(midiNotes: [Int], duration: Double) {
+        let events = midiNotes.map { note in
+            NoteEvent(note: note, startTime: 0, duration: duration)
+        }
+        playTimedSequence(events)
+    }
 }

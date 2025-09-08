@@ -9,16 +9,16 @@ struct ResponseSegment: Identifiable {
     let readingPause: TimeInterval // Time to wait after text appears before audio
     
     struct AudioInfo {
-        let midiNotes: [Int]
-        let duration: TimeInterval
-        let label: String // Clickable text label
+        let events: [SoundEngine.NoteEvent]  // List of timed note events
+        let totalDuration: TimeInterval      // Total duration of all events
+        let label: String                     // Clickable text label
     }
 }
 
 struct ProgressiveResponse {
     let segments: [ResponseSegment]
     
-    // Parse response format with inline clickable audio
+    // Parse response format with unified timed events
     static func parse(_ content: String) -> ProgressiveResponse {
         var segments: [ResponseSegment] = []
         let lines = content.components(separatedBy: "\n")
@@ -26,74 +26,114 @@ struct ProgressiveResponse {
         for line in lines {
             if line.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty { continue }
             
-            // Parse line for inline audio markers
-            var currentText = ""
-            var lastIndex = line.startIndex
-            
-            // Find all [AUDIO:...] markers in the line
-            let pattern = "\\[AUDIO:([^\\]]+)\\]"
-            let regex = try! NSRegularExpression(pattern: pattern, options: [])
-            let matches = regex.matches(in: line, options: [], range: NSRange(line.startIndex..., in: line))
-            
-            for match in matches {
-                guard let range = Range(match.range, in: line) else { continue }
+            // Check for new MIDI sequence format: [MIDI:note@start-duration,note@start-duration:label]
+            if let midiRange = line.range(of: "\\[MIDI:([^\\]]+)\\]", options: .regularExpression) {
+                let textBefore = String(line[..<midiRange.lowerBound])
                 
-                // Add text before the audio marker
-                let textBefore = String(line[lastIndex..<range.lowerBound])
+                // Add text before MIDI if exists
                 if !textBefore.isEmpty {
-                    currentText += textBefore
+                    segments.append(ResponseSegment(
+                        text: textBefore,
+                        audio: nil,
+                        readingPause: 0.8
+                    ))
                 }
                 
-                // Parse audio content: [AUDIO:60,64,67:2.0:major third]
-                let audioContent = String(line[range])
-                let audioData = audioContent
+                // Parse MIDI content
+                let midiContent = String(line[midiRange])
+                    .replacingOccurrences(of: "[MIDI:", with: "")
+                    .replacingOccurrences(of: "]", with: "")
+                
+                let parts = midiContent.split(separator: ":")
+                if parts.count >= 2 {
+                    let eventStrings = parts[0].split(separator: ",")
+                    let label = parts.count > 1 ? String(parts[1]) : "Play"
+                    
+                    var events: [SoundEngine.NoteEvent] = []
+                    var maxEndTime: Double = 0
+                    
+                    // Parse each event: note@start-duration
+                    for eventStr in eventStrings {
+                        let eventParts = eventStr.split(separator: "@")
+                        if eventParts.count == 2,
+                           let note = Int(eventParts[0]) {
+                            let timingParts = eventParts[1].split(separator: "-")
+                            if timingParts.count == 2,
+                               let startTime = Double(timingParts[0]),
+                               let duration = Double(timingParts[1]) {
+                                events.append(SoundEngine.NoteEvent(
+                                    note: note,
+                                    startTime: startTime,
+                                    duration: duration
+                                ))
+                                maxEndTime = max(maxEndTime, startTime + duration)
+                            }
+                        }
+                    }
+                    
+                    if !events.isEmpty {
+                        segments.append(ResponseSegment(
+                            text: label,
+                            audio: ResponseSegment.AudioInfo(
+                                events: events,
+                                totalDuration: maxEndTime,
+                                label: label
+                            ),
+                            readingPause: 0.0  // No pause for MIDI sequences - they play continuously
+                        ))
+                    }
+                }
+                
+                // Add remaining text after MIDI
+                let afterRange = String(line[midiRange.upperBound...])
+                if !afterRange.isEmpty {
+                    segments.append(ResponseSegment(
+                        text: afterRange,
+                        audio: nil,
+                        readingPause: 0.8
+                    ))
+                }
+            }
+            // Support old format for backwards compatibility
+            else if let audioRange = line.range(of: "\\[AUDIO:([^\\]]+)\\]", options: .regularExpression) {
+                let textBefore = String(line[..<audioRange.lowerBound])
+                if !textBefore.isEmpty {
+                    segments.append(ResponseSegment(text: textBefore, audio: nil, readingPause: 0.8))
+                }
+                
+                let audioContent = String(line[audioRange])
                     .replacingOccurrences(of: "[AUDIO:", with: "")
                     .replacingOccurrences(of: "]", with: "")
-                let parts = audioData.split(separator: ":")
+                let parts = audioContent.split(separator: ":")
                 
                 if parts.count >= 3 {
                     let notes = parts[0].split(separator: ",").compactMap { Int($0) }
                     let duration = Double(parts[1]) ?? 1.0
                     let label = String(parts[2])
                     
-                    // Add the clickable text to the current text
-                    currentText += label
-                    
-                    // Create segment with embedded audio
-                    if !currentText.isEmpty {
-                        segments.append(ResponseSegment(
-                            text: currentText,
-                            audio: ResponseSegment.AudioInfo(
-                                midiNotes: notes,
-                                duration: duration,
-                                label: label
-                            ),
-                            readingPause: 0.8
-                        ))
-                        currentText = ""
+                    // Convert old format to new timed events (all simultaneous for chords)
+                    let events = notes.map { note in
+                        SoundEngine.NoteEvent(note: note, startTime: 0, duration: duration)
                     }
-                }
-                
-                lastIndex = range.upperBound
-            }
-            
-            // Add any remaining text after the last audio marker
-            if lastIndex < line.endIndex {
-                let remainingText = String(line[lastIndex...])
-                if !remainingText.isEmpty {
+                    
                     segments.append(ResponseSegment(
-                        text: remainingText,
-                        audio: nil,
-                        readingPause: 0.8
+                        text: label,
+                        audio: ResponseSegment.AudioInfo(
+                            events: events,
+                            totalDuration: duration,
+                            label: label
+                        ),
+                        readingPause: 0.5
                     ))
                 }
-            } else if matches.isEmpty {
-                // No audio markers in this line
-                segments.append(ResponseSegment(
-                    text: line,
-                    audio: nil,
-                    readingPause: 1.0
-                ))
+                
+                let afterText = String(line[audioRange.upperBound...])
+                if !afterText.isEmpty {
+                    segments.append(ResponseSegment(text: afterText, audio: nil, readingPause: 0.8))
+                }
+            } else {
+                // Plain text line
+                segments.append(ResponseSegment(text: line, audio: nil, readingPause: 1.0))
             }
         }
         
@@ -184,7 +224,7 @@ struct ProgressiveResponseView: View {
                 playAudio(audio, segmentId: segment.id)
                 
                 // Wait for audio to finish then move to next segment
-                DispatchQueue.main.asyncAfter(deadline: .now() + audio.duration) {
+                DispatchQueue.main.asyncAfter(deadline: .now() + audio.totalDuration) {
                     withAnimation {
                         highlightedNotes.removeAll()
                         playingAudioId = nil
@@ -201,18 +241,21 @@ struct ProgressiveResponseView: View {
     }
     
     private func playAudio(_ audio: ResponseSegment.AudioInfo, segmentId: UUID) {
+        // Extract all unique notes for keyboard highlighting
+        let allNotes = Set(audio.events.map { $0.note })
+        
         // Highlight notes on keyboard
         withAnimation {
-            highlightedNotes = Set(audio.midiNotes)
+            highlightedNotes = allNotes
             playingAudioId = segmentId
         }
         
-        // Play the audio
-        soundEngine.playChord(midiNotes: audio.midiNotes, duration: audio.duration)
+        // Play the audio using the unified timed sequence
+        soundEngine.playTimedSequence(audio.events)
         
         // Clear highlights after audio finishes (only if this is a manual click)
         if clickableAudioEnabled {
-            DispatchQueue.main.asyncAfter(deadline: .now() + audio.duration) {
+            DispatchQueue.main.asyncAfter(deadline: .now() + audio.totalDuration) {
                 withAnimation {
                     highlightedNotes.removeAll()
                     playingAudioId = nil
