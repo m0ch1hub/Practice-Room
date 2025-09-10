@@ -71,7 +71,7 @@ class SoundEngine: ObservableObject {
     private func loadSoundFont() {
         Logger.shared.audio("Attempting to load SoundFont")
         
-        guard let soundFontURL = Bundle.main.url(forResource: "GeneralMidi", withExtension: "sf2") else {
+        guard let soundFontURL = Bundle.main.url(forResource: "Yamaha_C7__Normalized_", withExtension: "sf2") else {
             Logger.shared.audio("No SoundFont found, falling back to default instrument")
             loadDefaultInstrument()
             return

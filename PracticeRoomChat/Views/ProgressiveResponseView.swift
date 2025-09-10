@@ -4,21 +4,23 @@ import AVFoundation
 // MARK: - Data Models
 struct ResponseSegment: Identifiable {
     let id = UUID()
-    let text: String
-    let audio: AudioInfo?
+    let text: String  // Full line text including placeholders for audio
+    let audioElements: [AudioElement]  // All audio elements in this line
     let readingPause: TimeInterval // Time to wait after text appears before audio
     
-    struct AudioInfo {
+    struct AudioElement {
+        let id = UUID()
         let events: [SoundEngine.NoteEvent]  // List of timed note events
         let totalDuration: TimeInterval      // Total duration of all events
         let label: String                     // Clickable text label
+        let placeholder: String               // Placeholder in text to replace with clickable
     }
 }
 
 struct ProgressiveResponse {
     let segments: [ResponseSegment]
     
-    // Parse response format with unified timed events
+    // Parse response format with unified timed events - keeping full lines intact
     static func parse(_ content: String) -> ProgressiveResponse {
         var segments: [ResponseSegment] = []
         let lines = content.components(separatedBy: "\n")
@@ -26,115 +28,71 @@ struct ProgressiveResponse {
         for line in lines {
             if line.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty { continue }
             
-            // Check for new MIDI sequence format: [MIDI:note@start-duration,note@start-duration:label]
-            if let midiRange = line.range(of: "\\[MIDI:([^\\]]+)\\]", options: .regularExpression) {
-                let textBefore = String(line[..<midiRange.lowerBound])
+            var audioElements: [ResponseSegment.AudioElement] = []
+            var processedLine = line
+            var placeholderIndex = 0
+            
+            // Find all MIDI sequences in the line
+            let midiPattern = "\\[MIDI:([^\\]]+)\\]"
+            if let regex = try? NSRegularExpression(pattern: midiPattern) {
+                let matches = regex.matches(in: line, range: NSRange(line.startIndex..., in: line))
                 
-                // Add text before MIDI if exists
-                if !textBefore.isEmpty {
-                    segments.append(ResponseSegment(
-                        text: textBefore,
-                        audio: nil,
-                        readingPause: 0.8
-                    ))
-                }
-                
-                // Parse MIDI content
-                let midiContent = String(line[midiRange])
-                    .replacingOccurrences(of: "[MIDI:", with: "")
-                    .replacingOccurrences(of: "]", with: "")
-                
-                let parts = midiContent.split(separator: ":")
-                if parts.count >= 2 {
-                    let eventStrings = parts[0].split(separator: ",")
-                    let label = parts.count > 1 ? String(parts[1]) : "Play"
-                    
-                    var events: [SoundEngine.NoteEvent] = []
-                    var maxEndTime: Double = 0
-                    
-                    // Parse each event: note@start-duration
-                    for eventStr in eventStrings {
-                        let eventParts = eventStr.split(separator: "@")
-                        if eventParts.count == 2,
-                           let note = Int(eventParts[0]) {
-                            let timingParts = eventParts[1].split(separator: "-")
-                            if timingParts.count == 2,
-                               let startTime = Double(timingParts[0]),
-                               let duration = Double(timingParts[1]) {
-                                events.append(SoundEngine.NoteEvent(
-                                    note: note,
-                                    startTime: startTime,
-                                    duration: duration
+                // Process matches in reverse to maintain string indices
+                for match in matches.reversed() {
+                    if let range = Range(match.range, in: line) {
+                        let midiContent = String(line[range])
+                            .replacingOccurrences(of: "[MIDI:", with: "")
+                            .replacingOccurrences(of: "]", with: "")
+                        
+                        let parts = midiContent.split(separator: ":")
+                        if parts.count >= 2 {
+                            let eventStrings = parts[0].split(separator: ",")
+                            let label = String(parts[1])
+                            
+                            var events: [SoundEngine.NoteEvent] = []
+                            var maxEndTime: Double = 0
+                            
+                            for eventStr in eventStrings {
+                                let eventParts = eventStr.split(separator: "@")
+                                if eventParts.count == 2,
+                                   let note = Int(eventParts[0]) {
+                                    let timingParts = eventParts[1].split(separator: "-")
+                                    if timingParts.count == 2,
+                                       let startTime = Double(timingParts[0]),
+                                       let duration = Double(timingParts[1]) {
+                                        events.append(SoundEngine.NoteEvent(
+                                            note: note,
+                                            startTime: startTime,
+                                            duration: duration
+                                        ))
+                                        maxEndTime = max(maxEndTime, startTime + duration)
+                                    }
+                                }
+                            }
+                            
+                            if !events.isEmpty {
+                                let placeholder = "{{AUDIO_\(placeholderIndex)}}"
+                                audioElements.append(ResponseSegment.AudioElement(
+                                    events: events,
+                                    totalDuration: maxEndTime,
+                                    label: label,
+                                    placeholder: placeholder
                                 ))
-                                maxEndTime = max(maxEndTime, startTime + duration)
+                                processedLine.replaceSubrange(range, with: placeholder)
+                                placeholderIndex += 1
                             }
                         }
                     }
-                    
-                    if !events.isEmpty {
-                        segments.append(ResponseSegment(
-                            text: label,
-                            audio: ResponseSegment.AudioInfo(
-                                events: events,
-                                totalDuration: maxEndTime,
-                                label: label
-                            ),
-                            readingPause: 0.0  // No pause for MIDI sequences - they play continuously
-                        ))
-                    }
-                }
-                
-                // Add remaining text after MIDI
-                let afterRange = String(line[midiRange.upperBound...])
-                if !afterRange.isEmpty {
-                    segments.append(ResponseSegment(
-                        text: afterRange,
-                        audio: nil,
-                        readingPause: 0.8
-                    ))
                 }
             }
-            // Support old format for backwards compatibility
-            else if let audioRange = line.range(of: "\\[AUDIO:([^\\]]+)\\]", options: .regularExpression) {
-                let textBefore = String(line[..<audioRange.lowerBound])
-                if !textBefore.isEmpty {
-                    segments.append(ResponseSegment(text: textBefore, audio: nil, readingPause: 0.8))
-                }
-                
-                let audioContent = String(line[audioRange])
-                    .replacingOccurrences(of: "[AUDIO:", with: "")
-                    .replacingOccurrences(of: "]", with: "")
-                let parts = audioContent.split(separator: ":")
-                
-                if parts.count >= 3 {
-                    let notes = parts[0].split(separator: ",").compactMap { Int($0) }
-                    let duration = Double(parts[1]) ?? 1.0
-                    let label = String(parts[2])
-                    
-                    // Convert old format to new timed events (all simultaneous for chords)
-                    let events = notes.map { note in
-                        SoundEngine.NoteEvent(note: note, startTime: 0, duration: duration)
-                    }
-                    
-                    segments.append(ResponseSegment(
-                        text: label,
-                        audio: ResponseSegment.AudioInfo(
-                            events: events,
-                            totalDuration: duration,
-                            label: label
-                        ),
-                        readingPause: 0.5
-                    ))
-                }
-                
-                let afterText = String(line[audioRange.upperBound...])
-                if !afterText.isEmpty {
-                    segments.append(ResponseSegment(text: afterText, audio: nil, readingPause: 0.8))
-                }
-            } else {
-                // Plain text line
-                segments.append(ResponseSegment(text: line, audio: nil, readingPause: 1.0))
-            }
+            
+            
+            // Add the complete line as a single segment
+            segments.append(ResponseSegment(
+                text: processedLine,
+                audioElements: audioElements,
+                readingPause: audioElements.isEmpty ? 1.0 : 0.8
+            ))
         }
         
         return ProgressiveResponse(segments: segments)
@@ -157,29 +115,19 @@ struct ProgressiveResponseView: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
             ForEach(visibleSegments) { segment in
-                if let audio = segment.audio {
-                    // Text with inline clickable part
-                    InlineAudioText(
-                        fullText: segment.text,
-                        clickableText: audio.label,
-                        audio: audio,
-                        isEnabled: clickableAudioEnabled,
-                        isPlaying: playingAudioId == segment.id,
-                        onTap: {
-                            if clickableAudioEnabled {
-                                playAudio(audio, segmentId: segment.id)
-                            }
+                // Render each line with inline audio elements
+                LineWithInlineAudio(
+                    text: segment.text,
+                    audioElements: segment.audioElements,
+                    isEnabled: clickableAudioEnabled,
+                    playingElementIds: playingAudioId == segment.id ? Set(segment.audioElements.map { $0.id }) : [],
+                    onAudioTap: { element in
+                        if clickableAudioEnabled {
+                            playAudioElement(element, segmentId: segment.id)
                         }
-                    )
-                    .transition(.opacity.combined(with: .move(edge: .top)))
-                } else {
-                    // Regular text
-                    Text(segment.text)
-                        .font(.system(size: 18))
-                        .foregroundColor(.primary)
-                        .fixedSize(horizontal: false, vertical: true)
-                        .transition(.opacity.combined(with: .move(edge: .top)))
-                }
+                    }
+                )
+                .transition(.opacity.combined(with: .move(edge: .top)))
             }
             
             // Keyboard is now displayed in ChatView, not here
@@ -219,19 +167,9 @@ struct ProgressiveResponseView: View {
         
         // Wait for reading pause
         DispatchQueue.main.asyncAfter(deadline: .now() + segment.readingPause) {
-            if let audio = segment.audio {
-                // Play audio and highlight notes
-                playAudio(audio, segmentId: segment.id)
-                
-                // Wait for audio to finish then move to next segment
-                DispatchQueue.main.asyncAfter(deadline: .now() + audio.totalDuration) {
-                    withAnimation {
-                        highlightedNotes.removeAll()
-                        playingAudioId = nil
-                    }
-                    currentSegmentIndex += 1
-                    processNextSegment()
-                }
+            if !segment.audioElements.isEmpty {
+                // Play all audio elements in sequence
+                playSegmentAudio(segment)
             } else {
                 // No audio, move to next segment
                 currentSegmentIndex += 1
@@ -240,9 +178,31 @@ struct ProgressiveResponseView: View {
         }
     }
     
-    private func playAudio(_ audio: ResponseSegment.AudioInfo, segmentId: UUID) {
+    private func playSegmentAudio(_ segment: ResponseSegment) {
+        // Play audio elements in sequence during progression
+        var totalDelay: TimeInterval = 0
+        
+        for element in segment.audioElements {
+            DispatchQueue.main.asyncAfter(deadline: .now() + totalDelay) {
+                playAudioElement(element, segmentId: segment.id)
+            }
+            totalDelay += element.totalDuration + 0.3 // Small gap between elements
+        }
+        
+        // Move to next segment after all audio
+        DispatchQueue.main.asyncAfter(deadline: .now() + totalDelay) {
+            withAnimation {
+                highlightedNotes.removeAll()
+                playingAudioId = nil
+            }
+            currentSegmentIndex += 1
+            processNextSegment()
+        }
+    }
+    
+    private func playAudioElement(_ element: ResponseSegment.AudioElement, segmentId: UUID) {
         // Extract all unique notes for keyboard highlighting
-        let allNotes = Set(audio.events.map { $0.note })
+        let allNotes = Set(element.events.map { $0.note })
         
         // Highlight notes on keyboard
         withAnimation {
@@ -251,11 +211,11 @@ struct ProgressiveResponseView: View {
         }
         
         // Play the audio using the unified timed sequence
-        soundEngine.playTimedSequence(audio.events)
+        soundEngine.playTimedSequence(element.events)
         
         // Clear highlights after audio finishes (only if this is a manual click)
         if clickableAudioEnabled {
-            DispatchQueue.main.asyncAfter(deadline: .now() + audio.totalDuration) {
+            DispatchQueue.main.asyncAfter(deadline: .now() + element.totalDuration) {
                 withAnimation {
                     highlightedNotes.removeAll()
                     playingAudioId = nil
@@ -265,54 +225,122 @@ struct ProgressiveResponseView: View {
     }
 }
 
-// MARK: - Inline Audio Text with Clickable Part
-struct InlineAudioText: View {
-    let fullText: String
-    let clickableText: String
-    let audio: ResponseSegment.AudioInfo
+// MARK: - Line with Multiple Inline Audio Elements
+struct LineWithInlineAudio: View {
+    let text: String
+    let audioElements: [ResponseSegment.AudioElement]
     let isEnabled: Bool
-    let isPlaying: Bool
-    let onTap: () -> Void
-    
-    @State private var isPressed = false
+    let playingElementIds: Set<UUID>
+    let onAudioTap: (ResponseSegment.AudioElement) -> Void
     
     var body: some View {
-        // Find where the clickable text is in the full text
-        if let range = fullText.range(of: clickableText) {
-            let beforeText = String(fullText[..<range.lowerBound])
-            let afterText = String(fullText[range.upperBound...])
-            
-            // Use Text concatenation for inline layout instead of HStack
-            (Text(beforeText)
+        if audioElements.isEmpty {
+            // No audio elements, just plain text
+            Text(text)
                 .font(.system(size: 18))
                 .foregroundColor(.primary)
-            + Text(clickableText)
-                .font(.system(size: 18, weight: .medium))
-                .foregroundColor(isEnabled ? .blue : .blue.opacity(0.8))
-                .underline(true, color: .blue.opacity(0.4))
-            + Text(afterText)
-                .font(.system(size: 18))
-                .foregroundColor(.primary))
-            .fixedSize(horizontal: false, vertical: true)
-            .onTapGesture {
-                // For now, tap the whole text to trigger the clickable part
-                if isEnabled {
-                    withAnimation(.easeInOut(duration: 0.1)) {
-                        isPressed = true
-                    }
-                    onTap()
-                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
-                        withAnimation(.easeInOut(duration: 0.1)) {
-                            isPressed = false
-                        }
-                    }
-                }
-            }
+                .fixedSize(horizontal: false, vertical: true)
         } else {
-            // Fallback if we can't find the clickable text
-            Text(fullText)
-                .font(.system(size: 18))
-                .foregroundColor(.primary)
+            // Use HStack with proper wrapping for inline elements
+            WrappingHStack(
+                text: text,
+                audioElements: audioElements,
+                isEnabled: isEnabled,
+                playingElementIds: playingElementIds,
+                onAudioTap: onAudioTap
+            )
+        }
+    }
+}
+
+// Helper view to handle wrapping text with clickable elements
+struct WrappingHStack: View {
+    let text: String
+    let audioElements: [ResponseSegment.AudioElement]
+    let isEnabled: Bool
+    let playingElementIds: Set<UUID>
+    let onAudioTap: (ResponseSegment.AudioElement) -> Void
+    
+    var body: some View {
+        // Build an array of text segments and audio elements
+        let segments = buildSegments()
+        
+        // Use a single Text view with concatenation for proper inline flow
+        segments.reduce(Text("")) { result, segment in
+            switch segment {
+            case .text(let str):
+                return result + Text(str)
+                    .font(.system(size: 18))
+                    .foregroundColor(.primary)
+            case .audio(let element):
+                let isPlaying = playingElementIds.contains(element.id)
+                return result + Text(element.label)
+                    .font(.system(size: 18, weight: .medium))
+                    .foregroundColor(isEnabled ? (isPlaying ? .blue.opacity(0.7) : .blue) : .blue.opacity(0.6))
+                    .underline(true, color: .blue.opacity(0.4))
+            }
+        }
+        .fixedSize(horizontal: false, vertical: true)
+        .overlay(
+            // Add invisible tap targets for audio elements
+            GeometryReader { geometry in
+                Color.clear
+                    .contentShape(Rectangle())
+                    .onTapGesture { location in
+                        handleTap(at: location, in: geometry.size)
+                    }
+            }
+        )
+    }
+    
+    enum Segment {
+        case text(String)
+        case audio(ResponseSegment.AudioElement)
+    }
+    
+    private func buildSegments() -> [Segment] {
+        var segments: [Segment] = []
+        var currentText = text
+        
+        // Sort audio elements by their position in the text
+        let sortedElements = audioElements.sorted { elem1, elem2 in
+            guard let range1 = text.range(of: elem1.placeholder),
+                  let range2 = text.range(of: elem2.placeholder) else {
+                return false
+            }
+            return range1.lowerBound < range2.lowerBound
+        }
+        
+        for element in sortedElements {
+            if let range = currentText.range(of: element.placeholder) {
+                // Add text before the audio element
+                let beforeText = String(currentText[..<range.lowerBound])
+                if !beforeText.isEmpty {
+                    segments.append(.text(beforeText))
+                }
+                
+                // Add the audio element
+                segments.append(.audio(element))
+                
+                // Update current text to continue from after this element
+                currentText = String(currentText[range.upperBound...])
+            }
+        }
+        
+        // Add any remaining text
+        if !currentText.isEmpty {
+            segments.append(.text(currentText))
+        }
+        
+        return segments
+    }
+    
+    private func handleTap(at location: CGPoint, in size: CGSize) {
+        // This is a simplified tap handler - in production you'd calculate
+        // the actual text layout to determine which element was tapped
+        // For now, we'll make the entire line tappable and play the first audio element
+        if isEnabled, let firstAudio = audioElements.first {
+            onAudioTap(firstAudio)
         }
     }
 }
