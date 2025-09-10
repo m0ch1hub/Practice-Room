@@ -6,14 +6,16 @@ struct ResponseSegment: Identifiable {
     let id = UUID()
     let text: String  // Full line text including placeholders for audio
     let audioElements: [AudioElement]  // All audio elements in this line
-    let readingPause: TimeInterval // Time to wait after text appears before audio
+    let readingPauseTicks: Int // Ticks to wait after text appears before audio
+    let tempo: Double // BPM for this segment
     
     struct AudioElement {
         let id = UUID()
-        let events: [SoundEngine.NoteEvent]  // List of timed note events
-        let totalDuration: TimeInterval      // Total duration of all events
+        let events: [SoundEngine.NoteEvent]  // List of timed note events (tick-based)
+        let totalDurationTicks: Int          // Total duration in ticks
         let label: String                     // Clickable text label
         let placeholder: String               // Placeholder in text to replace with clickable
+        let tempo: Double                     // BPM for playback
     }
 }
 
@@ -56,16 +58,36 @@ struct ProgressiveResponse {
                                 let eventParts = eventStr.split(separator: "@")
                                 if eventParts.count == 2,
                                    let note = Int(eventParts[0]) {
-                                    let timingParts = eventParts[1].split(separator: "-")
-                                    if timingParts.count == 2,
-                                       let startTime = Double(timingParts[0]),
-                                       let duration = Double(timingParts[1]) {
-                                        events.append(SoundEngine.NoteEvent(
-                                            note: note,
-                                            startTime: startTime,
-                                            duration: duration
-                                        ))
-                                        maxEndTime = max(maxEndTime, startTime + duration)
+                                    let timingStr = String(eventParts[1])
+                                    let timingParts = timingStr.split(separator: "-")
+                                    if timingParts.count == 2 {
+                                        // Check if it's tick format (ends with 't') or seconds format
+                                        let startStr = String(timingParts[0])
+                                        let durationStr = String(timingParts[1])
+                                        
+                                        if startStr.hasSuffix("t") && durationStr.hasSuffix("t") {
+                                            // Tick format
+                                            let startTick = Int(startStr.dropLast()) ?? 0
+                                            let durationTicks = Int(durationStr.dropLast()) ?? 480
+                                            events.append(SoundEngine.NoteEvent(
+                                                note: note,
+                                                startTick: startTick,
+                                                durationTicks: durationTicks
+                                            ))
+                                            maxEndTime = max(maxEndTime, Double(startTick + durationTicks))
+                                        } else {
+                                            // Legacy seconds format - convert to ticks (assume 120 BPM)
+                                            let startTime = Double(startStr) ?? 0
+                                            let duration = Double(durationStr) ?? 1.0
+                                            let startTick = Int(startTime * 480 / 0.5) // 480 ticks per beat at 120 BPM
+                                            let durationTicks = Int(duration * 480 / 0.5)
+                                            events.append(SoundEngine.NoteEvent(
+                                                note: note,
+                                                startTick: startTick,
+                                                durationTicks: durationTicks
+                                            ))
+                                            maxEndTime = max(maxEndTime, Double(startTick + durationTicks))
+                                        }
                                     }
                                 }
                             }
@@ -74,9 +96,10 @@ struct ProgressiveResponse {
                                 let placeholder = "{{AUDIO_\(placeholderIndex)}}"
                                 audioElements.append(ResponseSegment.AudioElement(
                                     events: events,
-                                    totalDuration: maxEndTime,
+                                    totalDurationTicks: Int(maxEndTime),
                                     label: label,
-                                    placeholder: placeholder
+                                    placeholder: placeholder,
+                                    tempo: 120.0  // Default tempo, could be parsed from response
                                 ))
                                 processedLine.replaceSubrange(range, with: placeholder)
                                 placeholderIndex += 1
@@ -91,7 +114,8 @@ struct ProgressiveResponse {
             segments.append(ResponseSegment(
                 text: processedLine,
                 audioElements: audioElements,
-                readingPause: audioElements.isEmpty ? 1.0 : 0.8
+                readingPauseTicks: audioElements.isEmpty ? 480 : 384,  // 1 beat or 0.8 beats at 480 ticks per beat
+                tempo: 120.0  // Default tempo
             ))
         }
         
@@ -165,8 +189,9 @@ struct ProgressiveResponseView: View {
             }
         }
         
-        // Wait for reading pause
-        DispatchQueue.main.asyncAfter(deadline: .now() + segment.readingPause) {
+        // Wait for reading pause (convert ticks to seconds)
+        let pauseSeconds = Double(segment.readingPauseTicks) / Double(SoundEngine.defaultTicksPerBeat) * (60.0 / segment.tempo)
+        DispatchQueue.main.asyncAfter(deadline: .now() + pauseSeconds) {
             if !segment.audioElements.isEmpty {
                 // Play all audio elements in sequence
                 playSegmentAudio(segment)
@@ -184,9 +209,11 @@ struct ProgressiveResponseView: View {
         
         for element in segment.audioElements {
             DispatchQueue.main.asyncAfter(deadline: .now() + totalDelay) {
-                playAudioElement(element, segmentId: segment.id)
+                playAudioElement(element, segmentId: segment.id, tempo: segment.tempo)
             }
-            totalDelay += element.totalDuration + 0.3 // Small gap between elements
+            // Convert ticks to seconds for delay calculation
+            let elementDuration = Double(element.totalDurationTicks) / Double(SoundEngine.defaultTicksPerBeat) * (60.0 / segment.tempo)
+            totalDelay += elementDuration + 0.3 // Small gap between elements
         }
         
         // Move to next segment after all audio
@@ -200,7 +227,7 @@ struct ProgressiveResponseView: View {
         }
     }
     
-    private func playAudioElement(_ element: ResponseSegment.AudioElement, segmentId: UUID) {
+    private func playAudioElement(_ element: ResponseSegment.AudioElement, segmentId: UUID, tempo: Double = 120.0) {
         // Extract all unique notes for keyboard highlighting
         let allNotes = Set(element.events.map { $0.note })
         
@@ -210,12 +237,13 @@ struct ProgressiveResponseView: View {
             playingAudioId = segmentId
         }
         
-        // Play the audio using the unified timed sequence
-        soundEngine.playTimedSequence(element.events)
+        // Play the audio using the unified timed sequence with tempo
+        soundEngine.playTimedSequence(element.events, tempo: tempo)
         
         // Clear highlights after audio finishes (only if this is a manual click)
         if clickableAudioEnabled {
-            DispatchQueue.main.asyncAfter(deadline: .now() + element.totalDuration) {
+            let durationSeconds = Double(element.totalDurationTicks) / Double(SoundEngine.defaultTicksPerBeat) * (60.0 / tempo)
+            DispatchQueue.main.asyncAfter(deadline: .now() + durationSeconds) {
                 withAnimation {
                     highlightedNotes.removeAll()
                     playingAudioId = nil

@@ -185,42 +185,56 @@ class SoundEngine: ObservableObject {
         }
     }
     
-    // MARK: - Unified Timed Event System
+    // MARK: - Unified Timed Event System (Tick-based)
     struct NoteEvent {
         let note: Int          // MIDI note number
-        let startTime: Double  // When to start (in seconds from beginning)
-        let duration: Double   // How long to play (in seconds)
+        let startTick: Int     // When to start (in ticks from beginning)
+        let durationTicks: Int // How long to play (in ticks)
         let velocity: UInt8    // Volume/intensity (0-127)
         
-        init(note: Int, startTime: Double, duration: Double, velocity: UInt8 = 80) {
+        init(note: Int, startTick: Int, durationTicks: Int, velocity: UInt8 = 80) {
             self.note = note
-            self.startTime = startTime
-            self.duration = duration
+            self.startTick = startTick
+            self.durationTicks = durationTicks
             self.velocity = velocity
         }
     }
     
+    // Standard MIDI timing constants
+    static let defaultTicksPerBeat = 480
+    static let defaultTempo = 120.0 // BPM
+    
+    /// Convert ticks to seconds based on tempo
+    private func ticksToSeconds(_ ticks: Int, tempo: Double = defaultTempo) -> Double {
+        let ticksPerBeat = Double(Self.defaultTicksPerBeat)
+        let secondsPerBeat = 60.0 / tempo
+        return (Double(ticks) / ticksPerBeat) * secondsPerBeat
+    }
+    
     /// Play a sequence of timed note events - handles everything from single notes to full songs
-    func playTimedSequence(_ events: [NoteEvent]) {
-        Logger.shared.audio("Playing timed sequence with \(events.count) events")
+    func playTimedSequence(_ events: [NoteEvent], tempo: Double = defaultTempo) {
+        Logger.shared.audio("Playing timed sequence with \(events.count) events at \(tempo) BPM")
         
         for event in events {
+            let startTime = ticksToSeconds(event.startTick, tempo: tempo)
+            let duration = ticksToSeconds(event.durationTicks, tempo: tempo)
+            
             // Schedule note to start
-            DispatchQueue.main.asyncAfter(deadline: .now() + event.startTime) { [weak self] in
+            DispatchQueue.main.asyncAfter(deadline: .now() + startTime) { [weak self] in
                 self?.sampler.startNote(UInt8(event.note), withVelocity: event.velocity, onChannel: 0)
                 
                 // Schedule note to stop
-                DispatchQueue.main.asyncAfter(deadline: .now() + event.duration) { [weak self] in
+                DispatchQueue.main.asyncAfter(deadline: .now() + duration) { [weak self] in
                     self?.sampler.stopNote(UInt8(event.note), onChannel: 0)
                 }
             }
         }
     }
     
-    /// Convenience method to convert old format to new
-    func playChordAsSequence(midiNotes: [Int], duration: Double) {
+    /// Convenience method to play a simple chord
+    func playChordAsSequence(midiNotes: [Int], durationTicks: Int = 480) {
         let events = midiNotes.map { note in
-            NoteEvent(note: note, startTime: 0, duration: duration)
+            NoteEvent(note: note, startTick: 0, durationTicks: durationTicks)
         }
         playTimedSequence(events)
     }
