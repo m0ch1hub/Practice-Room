@@ -50,6 +50,7 @@ struct ProgressiveResponse {
                         if parts.count >= 2 {
                             let eventStrings = parts[0].split(separator: ",")
                             let label = String(parts[1])
+                            let tempo = parts.count >= 3 ? Double(parts[2]) ?? 120.0 : 120.0
                             
                             var events: [SoundEngine.NoteEvent] = []
                             var maxEndTime: Double = 0
@@ -99,7 +100,7 @@ struct ProgressiveResponse {
                                     totalDurationTicks: Int(maxEndTime),
                                     label: label,
                                     placeholder: placeholder,
-                                    tempo: 120.0  // Default tempo, could be parsed from response
+                                    tempo: tempo
                                 ))
                                 processedLine.replaceSubrange(range, with: placeholder)
                                 placeholderIndex += 1
@@ -111,11 +112,13 @@ struct ProgressiveResponse {
             
             
             // Add the complete line as a single segment
+            // Use tempo from first audio element if available, otherwise default
+            let segmentTempo = audioElements.first?.tempo ?? 120.0
             segments.append(ResponseSegment(
                 text: processedLine,
                 audioElements: audioElements,
                 readingPauseTicks: audioElements.isEmpty ? 480 : 384,  // 1 beat or 0.8 beats at 480 ticks per beat
-                tempo: 120.0  // Default tempo
+                tempo: segmentTempo
             ))
         }
         
@@ -209,10 +212,10 @@ struct ProgressiveResponseView: View {
         
         for element in segment.audioElements {
             DispatchQueue.main.asyncAfter(deadline: .now() + totalDelay) {
-                playAudioElement(element, segmentId: segment.id, tempo: segment.tempo)
+                playAudioElement(element, segmentId: segment.id, tempo: element.tempo)
             }
-            // Convert ticks to seconds for delay calculation
-            let elementDuration = Double(element.totalDurationTicks) / Double(SoundEngine.defaultTicksPerBeat) * (60.0 / segment.tempo)
+            // Convert ticks to seconds for delay calculation using element's tempo
+            let elementDuration = Double(element.totalDurationTicks) / Double(SoundEngine.defaultTicksPerBeat) * (60.0 / element.tempo)
             totalDelay += elementDuration + 0.3 // Small gap between elements
         }
         
