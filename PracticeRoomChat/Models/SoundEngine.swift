@@ -1,5 +1,7 @@
 import AVFoundation
 import Foundation
+import CoreMIDI
+import AudioToolbox
 
 class SoundEngine: ObservableObject {
     static let shared = SoundEngine()
@@ -8,6 +10,7 @@ class SoundEngine: ObservableObject {
     private var sampler: AVAudioUnitSampler
     private var reverb: AVAudioUnitReverb
     private var delay: AVAudioUnitDelay
+    private var sequencer: AVAudioSequencer?
     
     private init() {
         audioEngine = AVAudioEngine()
@@ -180,6 +183,10 @@ class SoundEngine: ObservableObject {
     }
     
     func stopAllNotes() {
+        // Stop sequencer if playing
+        sequencer?.stop()
+        
+        // Stop all individual notes
         for midi in 0...127 {
             sampler.stopNote(UInt8(midi), onChannel: 0)
         }
@@ -211,9 +218,168 @@ class SoundEngine: ObservableObject {
         return (Double(ticks) / ticksPerBeat) * secondsPerBeat
     }
     
-    /// Play a sequence of timed note events - handles everything from single notes to full songs
+    /// Play a sequence of timed note events using AVAudioSequencer for accurate timing
     func playTimedSequence(_ events: [NoteEvent], tempo: Double = defaultTempo) {
-        Logger.shared.audio("Playing timed sequence with \(events.count) events at \(tempo) BPM")
+        Logger.shared.audio("Playing timed sequence with \(events.count) events at \(tempo) BPM using AVAudioSequencer")
+        
+        // Stop any existing sequencer
+        sequencer?.stop()
+        
+        // Create new sequencer
+        sequencer = AVAudioSequencer(audioEngine: audioEngine)
+        
+        guard let sequencer = sequencer else {
+            Logger.shared.error("Failed to create audio sequencer")
+            return
+        }
+        
+        // Load a blank template or create tracks
+        let tracks = sequencer.tracks
+        
+        // If no tracks exist, we need to set up the sequencer differently
+        // For now, let's fall back to a more direct approach
+        
+        // Create MIDI data and write to temporary file
+        let midiData = createMIDIData(from: events, tempo: tempo)
+        
+        // Write to temp file
+        let tempURL = FileManager.default.temporaryDirectory.appendingPathComponent("temp_sequence.mid")
+        do {
+            try midiData.write(to: tempURL)
+            try sequencer.load(from: tempURL, options: [])
+            
+            // Set up the tracks to use our sampler
+            for track in sequencer.tracks {
+                track.destinationAudioUnit = sampler
+            }
+            
+            sequencer.currentPositionInBeats = 0
+            sequencer.rate = 1.0
+            
+            // Prepare engine and start
+            sequencer.prepareToPlay()
+            try sequencer.start()
+            
+        } catch {
+            Logger.shared.error("Failed to load or play sequence: \(error)")
+            // Fall back to legacy method
+            playTimedSequenceLegacy(events, tempo: tempo)
+        }
+    }
+    
+    /// Create MIDI file data from note events
+    private func createMIDIData(from events: [NoteEvent], tempo: Double) -> Data {
+        // This is a simplified MIDI file creator
+        // In production, you'd want to use a proper MIDI library
+        var midiData = Data()
+        
+        // MIDI Header
+        midiData.append(contentsOf: [0x4D, 0x54, 0x68, 0x64]) // "MThd"
+        midiData.append(contentsOf: [0x00, 0x00, 0x00, 0x06]) // Header length
+        midiData.append(contentsOf: [0x00, 0x00]) // Format 0
+        midiData.append(contentsOf: [0x00, 0x01]) // 1 track
+        midiData.append(contentsOf: [0x01, 0xE0]) // 480 ticks per quarter note
+        
+        // Track header
+        midiData.append(contentsOf: [0x4D, 0x54, 0x72, 0x6B]) // "MTrk"
+        
+        // We'll fill in track length later
+        let trackLengthPosition = midiData.count
+        midiData.append(contentsOf: [0x00, 0x00, 0x00, 0x00])
+        
+        var trackData = Data()
+        
+        // Tempo event
+        let microsecondsPerBeat = Int(60_000_000 / tempo)
+        trackData.append(0x00) // Delta time
+        trackData.append(0xFF) // Meta event
+        trackData.append(0x51) // Set tempo
+        trackData.append(0x03) // Length
+        trackData.append(UInt8((microsecondsPerBeat >> 16) & 0xFF))
+        trackData.append(UInt8((microsecondsPerBeat >> 8) & 0xFF))
+        trackData.append(UInt8(microsecondsPerBeat & 0xFF))
+        
+        // Sort events by start time
+        let sortedEvents = events.sorted { $0.startTick < $1.startTick }
+        
+        var currentTick = 0
+        var activeNotes: [(note: Int, endTick: Int)] = []
+        
+        for event in sortedEvents {
+            // Check for note offs that should happen before this note on
+            while let firstEndingNote = activeNotes.first(where: { $0.endTick <= event.startTick }) {
+                let deltaTime = firstEndingNote.endTick - currentTick
+                trackData.append(contentsOf: encodeVariableLength(deltaTime))
+                trackData.append(0x80) // Note off
+                trackData.append(UInt8(firstEndingNote.note))
+                trackData.append(0x40) // Velocity
+                currentTick = firstEndingNote.endTick
+                activeNotes.removeAll { $0.note == firstEndingNote.note }
+            }
+            
+            // Note on
+            let deltaTime = event.startTick - currentTick
+            trackData.append(contentsOf: encodeVariableLength(deltaTime))
+            trackData.append(0x90) // Note on
+            trackData.append(UInt8(event.note))
+            trackData.append(event.velocity)
+            currentTick = event.startTick
+            
+            activeNotes.append((note: event.note, endTick: event.startTick + event.durationTicks))
+        }
+        
+        // Remaining note offs
+        for (note, endTick) in activeNotes.sorted(by: { $0.endTick < $1.endTick }) {
+            let deltaTime = endTick - currentTick
+            trackData.append(contentsOf: encodeVariableLength(deltaTime))
+            trackData.append(0x80) // Note off
+            trackData.append(UInt8(note))
+            trackData.append(0x40) // Velocity
+            currentTick = endTick
+        }
+        
+        // End of track
+        trackData.append(0x00) // Delta time
+        trackData.append(0xFF) // Meta event
+        trackData.append(0x2F) // End of track
+        trackData.append(0x00) // Length
+        
+        // Update track length
+        let trackLength = trackData.count
+        midiData[trackLengthPosition] = UInt8((trackLength >> 24) & 0xFF)
+        midiData[trackLengthPosition + 1] = UInt8((trackLength >> 16) & 0xFF)
+        midiData[trackLengthPosition + 2] = UInt8((trackLength >> 8) & 0xFF)
+        midiData[trackLengthPosition + 3] = UInt8(trackLength & 0xFF)
+        
+        midiData.append(trackData)
+        
+        return midiData
+    }
+    
+    /// Encode integer as MIDI variable length value
+    private func encodeVariableLength(_ value: Int) -> [UInt8] {
+        var bytes: [UInt8] = []
+        var val = value
+        
+        repeat {
+            var byte = UInt8(val & 0x7F)
+            val >>= 7
+            if !bytes.isEmpty {
+                byte |= 0x80
+            }
+            bytes.insert(byte, at: 0)
+        } while val > 0
+        
+        if bytes.isEmpty {
+            bytes = [0]
+        }
+        
+        return bytes
+    }
+    
+    /// Legacy timer-based playback (keeping for simple cases)
+    func playTimedSequenceLegacy(_ events: [NoteEvent], tempo: Double = defaultTempo) {
+        Logger.shared.audio("Playing timed sequence with \(events.count) events at \(tempo) BPM (legacy)")
         
         for event in events {
             let startTime = ticksToSeconds(event.startTick, tempo: tempo)
