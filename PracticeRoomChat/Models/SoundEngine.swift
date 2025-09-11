@@ -10,7 +10,9 @@ class SoundEngine: ObservableObject {
     private var sampler: AVAudioUnitSampler
     private var reverb: AVAudioUnitReverb
     private var delay: AVAudioUnitDelay
-    private var sequencer: AVAudioSequencer?
+    // private var midiSequencer: MIDISequencer?
+    // private var midiSequencer: MIDISequencerSimple?
+    private var avSequencer: AVSequencer?
     
     private init() {
         audioEngine = AVAudioEngine()
@@ -20,6 +22,13 @@ class SoundEngine: ObservableObject {
         
         setupAudioEngine()
         loadSoundFont()
+        // Use AVAudioSequencer for proper timing
+        if #available(iOS 13.0, *) {
+            avSequencer = AVSequencer(engine: audioEngine, sampler: sampler)
+        } else {
+            // Fallback for older iOS versions
+            // midiSequencer = MIDISequencerSimple(engine: audioEngine, sampler: sampler)
+        }
     }
     
     // Simple methods for slide view
@@ -184,7 +193,9 @@ class SoundEngine: ObservableObject {
     
     func stopAllNotes() {
         // Stop sequencer if playing
-        sequencer?.stop()
+        if #available(iOS 13.0, *) {
+            avSequencer?.stop()
+        }
         
         // Stop all individual notes
         for midi in 0...127 {
@@ -220,50 +231,13 @@ class SoundEngine: ObservableObject {
     
     /// Play a sequence of timed note events using AVAudioSequencer for accurate timing
     func playTimedSequence(_ events: [NoteEvent], tempo: Double = defaultTempo) {
-        Logger.shared.audio("Playing timed sequence with \(events.count) events at \(tempo) BPM using AVAudioSequencer")
+        Logger.shared.audio("Playing timed sequence with \(events.count) events at \(tempo) BPM")
         
-        // Stop any existing sequencer
-        sequencer?.stop()
-        
-        // Create new sequencer
-        sequencer = AVAudioSequencer(audioEngine: audioEngine)
-        
-        guard let sequencer = sequencer else {
-            Logger.shared.error("Failed to create audio sequencer")
-            return
-        }
-        
-        // Load a blank template or create tracks
-        let tracks = sequencer.tracks
-        
-        // If no tracks exist, we need to set up the sequencer differently
-        // For now, let's fall back to a more direct approach
-        
-        // Create MIDI data and write to temporary file
-        let midiData = createMIDIData(from: events, tempo: tempo)
-        
-        // Write to temp file
-        let tempURL = FileManager.default.temporaryDirectory.appendingPathComponent("temp_sequence.mid")
-        do {
-            try midiData.write(to: tempURL)
-            try sequencer.load(from: tempURL, options: [])
-            
-            // Set up the tracks to use our sampler
-            for track in sequencer.tracks {
-                track.destinationAudioUnit = sampler
-            }
-            
-            sequencer.currentPositionInBeats = 0
-            sequencer.rate = 1.0
-            
-            // Prepare engine and start
-            sequencer.prepareToPlay()
-            try sequencer.start()
-            
-        } catch {
-            Logger.shared.error("Failed to load or play sequence: \(error)")
-            // Fall back to legacy method
-            playTimedSequenceLegacy(events, tempo: tempo)
+        // Use AVAudioSequencer for accurate playback
+        if #available(iOS 13.0, *) {
+            avSequencer?.playEvents(events, tempo: tempo)
+        } else {
+            Logger.shared.error("AVAudioSequencer requires iOS 13.0 or later")
         }
     }
     

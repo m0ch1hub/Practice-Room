@@ -1,0 +1,82 @@
+Note events:
+  C2   (MIDI  48) starts at tick    0, duration  238 ticks
+  D#2  (MIDI  51) starts at tick  240, duration  118 ticks
+  G2   (MIDI  55) starts at tick  360, duration  118 ticks
+  A#2  (MIDI  58) starts at tick  480, duration 1366 ticks
+  D#3  (MIDI  63) starts at tick  600, duration  118 ticks
+  G3   (MIDI  67) starts at tick  720, duration  118 ticks
+  A#3  (MIDI  70) starts at tick  840, duration  118 ticks
+  D#4  (MIDI  75) starts at tick  960, duration  911 ticks
+  A#2  (MIDI  58) starts at tick 1920, duration  958 ticks
+  G4   (MIDI  79) starts at tick 2400, duration  238 ticks
+  G#4  (MIDI  80) starts at tick 2640, duration  238 ticks
+  C2   (MIDI  48) starts at tick 2880, duration  455 ticks
+  D#2  (MIDI  51) starts at tick 2880, duration  455 ticks
+  F2   (MIDI  53) starts at tick 2880, duration  455 ticks
+  A2   (MIDI  57) starts at tick 2880, duration  455 ticks
+  D4   (MIDI  74) starts at tick 2880, duration  455 ticks
+  F#4  (MIDI  78) starts at tick 2880, duration  455 ticks
+  A4   (MIDI  81) starts at tick 2880, duration  455 ticks
+  A2   (MIDI  57) starts at tick 3360, duration  455 ticks
+  D4   (MIDI  74) starts at tick 3480, duration  118 ticks
+  C5   (MIDI  84) starts at tick 3480, duration  118 ticks
+  D4   (MIDI  74) starts at tick 3600, duration  238 ticks
+  A#4  (MIDI  82) starts at tick 3600, duration  238 ticks
+  A#1  (MIDI  46) starts at tick 3840, duration 1822 ticks
+  D2   (MIDI  50) starts at tick 3840, duration 1822 ticks
+  F2   (MIDI  53) starts at tick 3840, duration 1822 ticks
+  A2   (MIDI  57) starts at tick 3840, duration 1822 ticks
+  D4   (MIDI  74) starts at tick 3840, duration  478 ticks
+  F4   (MIDI  77) starts at tick 3840, duration  240 ticks
+  A4   (MIDI  81) starts at tick 3840, duration  238 ticks
+  F4   (MIDI  77) starts at tick 4080, duration  238 ticks
+  D4   (MIDI  74) starts at tick 4320, duration  238 ticks
+  A#3  (MIDI  70) starts at tick 4560, duration  238 ticks
+  A3   (MIDI  69) starts at tick 4800, duration  238 ticks
+  A#3  (MIDI  70) starts at tick 5040, duration  238 ticks
+  A3   (MIDI  69) starts at tick 5280, duration  238 ticks
+  G3   (MIDI  67) starts at tick 5520, duration  226 ticks
+
+MIDI string for training data:
+[MIDI:48@0t-238t,51@240t-118t,55@360t-118t,58@480t-1366t,63@600t-118t,67@720t-118t,70@840t-118t,75@960t-911t,58@1920t-958t,79@2400t-238t,80@2640t-238t,48@2880t-455t,51@2880t-455t,53@2880t-455t,57@2880t-455t,74@2880t-455t,78@2880t-455t,81@2880t-455t,57@3360t-455t,74@3480t-118t,84@3480t-118t,74@3600t-238t,82@3600t-238t,46@3840t-1822t,50@3840t-1822t,53@3840t-1822t,57@3840t-1822t,74@3840t-478t,77@3840t-240t,81@3840t-238t,77@4080t-238t,74@4320t-238t,70@4560t-238t,69@4800t-238t,70@5040t-238t,69@5280t-238t,67@5520t-226t:Autumn Leaves 2-5-1:120]
+
+Swift code for TestMIDIView:
+let events = [
+    SoundEngine.NoteEvent(note: 48, startTick: 0, durationTicks: 238),
+    SoundEngine.NoteEvent(note: 51, startTick: 240, durationTicks: 118),
+    SoundEngine.NoteEvent(note: 55, startTick: 360, durationTicks: 118),
+    SoundEngine.NoteEvent(note: 58, startTick: 480, durationTicks: 1366),
+    SoundEngine.NoteEvent(note: 63, startTick: 600, durationTicks: 118),
+    SoundEngine.NoteEvent(note: 67, startTick: 720, durationTicks: 118),
+    SoundEngine.NoteEvent(note: 70, startTick: 840, durationTicks: 118),
+    SoundEngine.NoteEvent(note: 75, startTick: 960, durationTicks: 911),
+    SoundEngine.NoteEvent(note: 58, startTick: 1920, durationTicks: 958),
+    SoundEngine.NoteEvent(note: 79, startTick: 2400, durationTicks: 238),
+    SoundEngine.NoteEvent(note: 80, startTick: 2640, durationTicks: 238),
+    SoundEngine.NoteEvent(note: 48, startTick: 2880, durationTicks: 455),
+    SoundEngine.NoteEvent(note: 51, startTick: 2880, durationTicks: 455),
+    SoundEngine.NoteEvent(note: 53, startTick: 2880, durationTicks: 455),
+    SoundEngine.NoteEvent(note: 57, startTick: 2880, durationTicks: 455),
+    SoundEngine.NoteEvent(note: 74, startTick: 2880, durationTicks: 455),
+    SoundEngine.NoteEvent(note: 78, startTick: 2880, durationTicks: 455),
+    SoundEngine.NoteEvent(note: 81, startTick: 2880, durationTicks: 455),
+    SoundEngine.NoteEvent(note: 57, startTick: 3360, durationTicks: 455),
+    SoundEngine.NoteEvent(note: 74, startTick: 3480, durationTicks: 118),
+    SoundEngine.NoteEvent(note: 84, startTick: 3480, durationTicks: 118),
+    SoundEngine.NoteEvent(note: 74, startTick: 3600, durationTicks: 238),
+    SoundEngine.NoteEvent(note: 82, startTick: 3600, durationTicks: 238),
+    SoundEngine.NoteEvent(note: 46, startTick: 3840, durationTicks: 1822),
+    SoundEngine.NoteEvent(note: 50, startTick: 3840, durationTicks: 1822),
+    SoundEngine.NoteEvent(note: 53, startTick: 3840, durationTicks: 1822),
+    SoundEngine.NoteEvent(note: 57, startTick: 3840, durationTicks: 1822),
+    SoundEngine.NoteEvent(note: 74, startTick: 3840, durationTicks: 478),
+    SoundEngine.NoteEvent(note: 77, startTick: 3840, durationTicks: 240),
+    SoundEngine.NoteEvent(note: 81, startTick: 3840, durationTicks: 238),
+    SoundEngine.NoteEvent(note: 77, startTick: 4080, durationTicks: 238),
+    SoundEngine.NoteEvent(note: 74, startTick: 4320, durationTicks: 238),
+    SoundEngine.NoteEvent(note: 70, startTick: 4560, durationTicks: 238),
+    SoundEngine.NoteEvent(note: 69, startTick: 4800, durationTicks: 238),
+    SoundEngine.NoteEvent(note: 70, startTick: 5040, durationTicks: 238),
+    SoundEngine.NoteEvent(note: 69, startTick: 5280, durationTicks: 238),
+    SoundEngine.NoteEvent(note: 67, startTick: 5520, durationTicks: 226),
+]
