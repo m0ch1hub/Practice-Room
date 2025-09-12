@@ -133,7 +133,7 @@ class ChatService: ObservableObject {
         }
         
         // Get ID token for authentication
-        let token = try await Auth.auth().currentUser?.getIDToken()
+        let _ = try await Auth.auth().currentUser?.getIDToken()
         Logger.shared.api("Got ID token for backend call")
         
         // Call Google Cloud Function via HTTP (using fine-tuned model endpoint)
@@ -256,26 +256,63 @@ class ChatService: ObservableObject {
     }
     
     private func parseStructuredResponse(_ content: String) -> (explanation: String, examples: [MusicalExample]) {
-        if let jsonData = content.data(using: .utf8),
-           let jsonResponse = try? JSONSerialization.jsonObject(with: jsonData) as? [String: Any] {
-            
-            if let sectionsArray = jsonResponse["sections"] as? [[String: Any]] {
-                return parseSectionsFormat(sectionsArray)
-            }
-            
-            if let explanation = jsonResponse["explanation"] as? String {
-                let examples = parseExamplesFromJSON(jsonResponse["examples"])
-                return (explanation, examples)
-            }
-            
-            if let text = jsonResponse["text"] as? String {
-                return extractExamplesFromText(text)
+        // Unified parser for [MIDI:...] format
+        return parseUnifiedMIDIFormat(content)
+    }
+    
+    private func parseUnifiedMIDIFormat(_ content: String) -> (explanation: String, examples: [MusicalExample]) {
+        var examples: [MusicalExample] = []
+        var processedText = content
+        
+        // Pattern to match [MIDI:notes@start-end:label] format
+        let pattern = "\\[MIDI:([^\\]]+?)@(\\d+t)-(\\d+t):([^\\]]+?)\\]"
+        
+        guard let regex = try? NSRegularExpression(pattern: pattern, options: []) else {
+            Logger.shared.error("Failed to create MIDI regex")
+            return (content, [])
+        }
+        
+        let matches = regex.matches(in: content, options: [], range: NSRange(content.startIndex..<content.endIndex, in: content))
+        
+        // Process matches in reverse order to maintain string indices
+        for match in matches.reversed() {
+            if match.numberOfRanges >= 5,
+               let notesRange = Range(match.range(at: 1), in: content),
+               let startRange = Range(match.range(at: 2), in: content),
+               let endRange = Range(match.range(at: 3), in: content),
+               let labelRange = Range(match.range(at: 4), in: content) {
+                
+                let notes = String(content[notesRange])
+                let _ = String(content[startRange])  // Start ticks for future duration calculation
+                let _ = String(content[endRange])    // End ticks for future duration calculation
+                let label = String(content[labelRange])
+                
+                // Convert tick duration to seconds (assuming 960 ticks per beat at 120 BPM = 2 beats per second)
+                let duration = "2.0s" // Default 2 seconds for now, can be calculated from ticks if needed
+                
+                // Determine the example type from the notes
+                let type = inferExampleType(from: notes)
+                
+                // Create the musical example with the original MIDI format
+                let example = MusicalExample(
+                    type: type,
+                    content: "MIDI:\(notes):\(duration)",
+                    displayText: label
+                )
+                examples.append(example)
+                
+                // Replace the MIDI tag with just the label text in the explanation
+                if let fullRange = Range(match.range(at: 0), in: processedText) {
+                    processedText.replaceSubrange(fullRange, with: "[\(label)]")
+                }
             }
         }
         
-        return extractExamplesFromText(content)
+        Logger.shared.api("Parsed \(examples.count) MIDI examples from unified format")
+        return (processedText, examples)
     }
     
+    // Legacy parsing methods - kept for reference but not used
     private func parseSectionsFormat(_ sectionsArray: [[String: Any]]) -> (explanation: String, examples: [MusicalExample]) {
         var textSections: [String] = []
         var examples: [MusicalExample] = []
@@ -380,6 +417,7 @@ class ChatService: ObservableObject {
         return examples
     }
     
+    // Legacy method - kept for reference but not used
     private func extractExamplesFromText(_ text: String) -> (explanation: String, examples: [MusicalExample]) {
         var processedText = text
         var examples: [MusicalExample] = []
