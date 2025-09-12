@@ -96,7 +96,16 @@ class ChatService: ObservableObject {
         
         Task {
             do {
-                let response = try await callVertexAI(message: message)
+                // Check if we should use local training data
+                let useLocalData = UserDefaults.standard.bool(forKey: "useLocalTrainingData")
+                let response: ChatMessage
+                
+                if useLocalData {
+                    response = try await getResponseFromTrainingData(message: message)
+                } else {
+                    response = try await callVertexAI(message: message)
+                }
+                
                 await MainActor.run {
                     self.messages.append(response)
                     self.isLoading = false
@@ -173,6 +182,88 @@ class ChatService: ObservableObject {
         Logger.shared.api("Parsed examples count: \(examples.count)")
         
         return ChatMessage(role: "assistant", content: explanation, examples: examples)
+    }
+    
+    private func getResponseFromTrainingData(message: String) async throws -> ChatMessage {
+        // Load training data
+        let trainingData = loadTrainingData()
+        
+        // Find a matching example (case-insensitive)
+        let lowercasedMessage = message.lowercased().trimmingCharacters(in: .whitespacesAndNewlines)
+        
+        for example in trainingData {
+            if let userPart = example["user"]?.lowercased().trimmingCharacters(in: .whitespacesAndNewlines),
+               userPart == lowercasedMessage || userPart.contains(lowercasedMessage) || lowercasedMessage.contains(userPart) {
+                if let modelResponse = example["model"] {
+                    Logger.shared.api("Found matching training example for: \(message)")
+                    let (explanation, examples) = parseStructuredResponse(modelResponse)
+                    return ChatMessage(role: "assistant", content: explanation, examples: examples)
+                }
+            }
+        }
+        
+        // If no exact match, return a default response
+        Logger.shared.api("No matching training example found for: \(message)")
+        return ChatMessage(
+            role: "assistant",
+            content: "I don't have a training example for that question. Try asking about major chords, scales, or music theory basics.",
+            examples: []
+        )
+    }
+    
+    private func loadTrainingData() -> [[String: String]] {
+        var trainingExamples: [[String: String]] = []
+        
+        // Try to load from development path first
+        let devPath = "/Users/mochi/Documents/Practice Room Chat/PracticeRoomChat/Training Data/simple_training_data.jsonl"
+        let bundlePath = Bundle.main.path(forResource: "simple_training_data", ofType: "jsonl") ?? ""
+        
+        let pathToUse = FileManager.default.fileExists(atPath: devPath) ? devPath : bundlePath
+        
+        if FileManager.default.fileExists(atPath: pathToUse) {
+            Logger.shared.api("Loading simple training data from: \(pathToUse)")
+            do {
+                let content = try String(contentsOfFile: pathToUse, encoding: .utf8)
+                let lines = content.components(separatedBy: .newlines)
+                
+                for line in lines {
+                    if line.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty { continue }
+                    
+                    if let data = line.data(using: .utf8),
+                       let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+                       let contents = json["contents"] as? [[String: Any]] {
+                        
+                        var userText = ""
+                        var modelText = ""
+                        
+                        for item in contents {
+                            if let role = item["role"] as? String,
+                               let parts = item["parts"] as? [[String: Any]] {
+                                for part in parts {
+                                    if let text = part["text"] as? String {
+                                        if role == "user" {
+                                            userText = text
+                                        } else if role == "model" {
+                                            modelText = text
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                        
+                        if !userText.isEmpty && !modelText.isEmpty {
+                            trainingExamples.append(["user": userText, "model": modelText])
+                        }
+                    }
+                }
+                
+                Logger.shared.api("Loaded \(trainingExamples.count) training examples")
+            } catch {
+                Logger.shared.error("Failed to load training data: \(error)")
+            }
+        }
+        
+        return trainingExamples
     }
     
     private func callVertexAIDirect(message: String) async throws -> ChatMessage {

@@ -8,6 +8,7 @@ struct ChatView: View {
     @State private var highlightedNotes: Set<Int> = []
     @State private var showingExamplesMenu = false
     @State private var availableQuestions: [String] = []
+    @State private var showingSettings = false
     // Removed showSlidesView state
     
     var body: some View {
@@ -70,8 +71,10 @@ struct ChatView: View {
                     
                     Spacer()
                     
-                    // Settings button placeholder
-                    Button(action: {}) {
+                    // Settings button
+                    Button(action: {
+                        showingSettings = true
+                    }) {
                         Image(systemName: "gearshape")
                             .font(.title2)
                             .foregroundColor(.primary)
@@ -150,6 +153,9 @@ struct ChatView: View {
         .background(Color(.systemBackground))
         .onAppear {
             loadAvailableQuestions()
+        }
+        .sheet(isPresented: $showingSettings) {
+            SettingsView()
         }
         // Removed fullScreenCover for slides
     }
