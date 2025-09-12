@@ -301,9 +301,9 @@ class ChatService: ObservableObject {
                 )
                 examples.append(example)
                 
-                // Replace the MIDI tag with just the label text in the explanation
+                // Replace the MIDI tag with AUDIO format for UI rendering
                 if let fullRange = Range(match.range(at: 0), in: processedText) {
-                    processedText.replaceSubrange(fullRange, with: "[\(label)]")
+                    processedText.replaceSubrange(fullRange, with: "[AUDIO:MIDI:\(notes):\(duration):\(label)]")
                 }
             }
         }
