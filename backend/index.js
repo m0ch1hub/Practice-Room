@@ -88,6 +88,11 @@ functions.http('musicTheoryChat', async (req, res) => {
           parts: [{ text: message }]
         }
       ],
+      systemInstruction: {
+        parts: [{
+          text: "You've been fine-tuned on music theory examples. Maintain that exact format and style, especially the [MIDI:notes@start-end:label] notation."
+        }]
+      },
       generationConfig: {
         maxOutputTokens: 2048,
         temperature: 0.5,  // Lower temperature for more consistent responses
