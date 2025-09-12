@@ -262,7 +262,6 @@ class ChatService: ObservableObject {
     
     private func parseUnifiedMIDIFormat(_ content: String) -> (explanation: String, examples: [MusicalExample]) {
         var examples: [MusicalExample] = []
-        var processedText = content
         
         // Pattern to match [MIDI:notes@start-end:label] format
         let pattern = "\\[MIDI:([^\\]]+?)@(\\d+t)-(\\d+t):([^\\]]+?)\\]"
@@ -274,42 +273,34 @@ class ChatService: ObservableObject {
         
         let matches = regex.matches(in: content, options: [], range: NSRange(content.startIndex..<content.endIndex, in: content))
         
-        // Process matches in reverse order to maintain string indices
-        for match in matches.reversed() {
+        // Extract examples for the examples array but don't modify the text
+        for match in matches {
             if match.numberOfRanges >= 5,
                let notesRange = Range(match.range(at: 1), in: content),
-               let startRange = Range(match.range(at: 2), in: content),
-               let endRange = Range(match.range(at: 3), in: content),
                let labelRange = Range(match.range(at: 4), in: content) {
                 
                 let notes = String(content[notesRange])
-                let _ = String(content[startRange])  // Start ticks for future duration calculation
-                let _ = String(content[endRange])    // End ticks for future duration calculation
                 let label = String(content[labelRange])
                 
                 // Convert tick duration to seconds (assuming 960 ticks per beat at 120 BPM = 2 beats per second)
-                let duration = "2.0s" // Default 2 seconds for now, can be calculated from ticks if needed
+                let duration = "2.0s" // Default 2 seconds for now
                 
                 // Determine the example type from the notes
                 let type = inferExampleType(from: notes)
                 
-                // Create the musical example with the original MIDI format
+                // Create the musical example
                 let example = MusicalExample(
                     type: type,
                     content: "MIDI:\(notes):\(duration)",
                     displayText: label
                 )
                 examples.append(example)
-                
-                // Replace the MIDI tag with AUDIO format for UI rendering
-                if let fullRange = Range(match.range(at: 0), in: processedText) {
-                    processedText.replaceSubrange(fullRange, with: "[AUDIO:\(notes):\(duration):\(label)]")
-                }
             }
         }
         
         Logger.shared.api("Parsed \(examples.count) MIDI examples from unified format")
-        return (processedText, examples)
+        // Return the original content unmodified - ProgressiveResponseView will parse it
+        return (content, examples)
     }
     
     // Legacy parsing methods - kept for reference but not used
