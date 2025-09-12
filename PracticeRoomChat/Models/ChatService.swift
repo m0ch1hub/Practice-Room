@@ -303,7 +303,7 @@ class ChatService: ObservableObject {
                 
                 // Replace the MIDI tag with AUDIO format for UI rendering
                 if let fullRange = Range(match.range(at: 0), in: processedText) {
-                    processedText.replaceSubrange(fullRange, with: "[AUDIO:MIDI:\(notes):\(duration):\(label)]")
+                    processedText.replaceSubrange(fullRange, with: "[AUDIO:\(notes):\(duration):\(label)]")
                 }
             }
         }
