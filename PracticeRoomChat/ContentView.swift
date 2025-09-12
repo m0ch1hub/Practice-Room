@@ -8,29 +8,9 @@
 import SwiftUI
 
 struct ContentView: View {
-    @State private var showTestView = false
-    
     var body: some View {
         NavigationView {
-            if showTestView {
-                TestMIDIView()
-                    .toolbar {
-                        ToolbarItem(placement: .navigationBarTrailing) {
-                            Button("Chat") {
-                                showTestView = false
-                            }
-                        }
-                    }
-            } else {
-                ChatView()
-                    .toolbar {
-                        ToolbarItem(placement: .navigationBarTrailing) {
-                            Button("Test MIDI") {
-                                showTestView = true
-                            }
-                        }
-                    }
-            }
+            ChatView()
         }
     }
 }

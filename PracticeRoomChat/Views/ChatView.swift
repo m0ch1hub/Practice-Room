@@ -38,9 +38,9 @@ struct ChatView: View {
                                 .id("loading")
                         }
                         
-                        // Bottom anchor for scrolling
+                        // Bottom anchor for scrolling - increased height for piano visibility
                         Color.clear
-                            .frame(height: 90)
+                            .frame(height: 200) // Increased from 90 to account for piano height
                             .id("bottom")
                     }
                     .padding(.horizontal, 20)

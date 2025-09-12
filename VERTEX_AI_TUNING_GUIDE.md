@@ -212,17 +212,6 @@ gcloud functions logs read musicTheoryChat --region=us-central1 --limit=50
 gcloud functions list --project=gen-lang-client-0477203387
 ```
 
-## Cost Management
-- **Training**: ~$2-5 per training run
-- **Deployed Endpoint**: ~$50-200/month (keep only one active)
-- **Cloud Function**: ~$0.40 per million requests
-- **Storage**: Minimal (<$1/month)
-
-## Future Improvements
-1. Add more training examples (aim for 50-100)
-2. Include scales, progressions, advanced theory
-3. Add more variation in question phrasing
-4. Consider using larger base model for complex queries
 
 ## Files Reference
 - Backend: `/backend/index.js`

@@ -114,10 +114,21 @@ struct ProgressiveResponse {
             // Add the complete line as a single segment
             // Use tempo from first audio element if available, otherwise default
             let segmentTempo = audioElements.first?.tempo ?? 120.0
+            
+            // Calculate reading time based on word count for ALL segments
+            // Target: 400 words per minute (faster than average 200-250 wpm)
+            // Count words in the text (excluding placeholders)
+            let cleanText = processedLine.replacingOccurrences(of: #"\{\{AUDIO_\d+\}\}"#, with: "", options: .regularExpression)
+            let wordCount = cleanText.split(separator: " ").count
+            // 400 wpm = 6.67 words per second = 0.15 seconds per word
+            // Convert to ticks: 0.15 seconds * (480 ticks/beat) / (0.5 seconds/beat at 120 BPM)
+            let ticksPerWord = 144  // 0.15 seconds worth of ticks at 120 BPM
+            let readingPauseTicks = max(wordCount * ticksPerWord, 240)  // Minimum 0.5 beat
+            
             segments.append(ResponseSegment(
                 text: processedLine,
                 audioElements: audioElements,
-                readingPauseTicks: audioElements.isEmpty ? 480 : 384,  // 1 beat or 0.8 beats at 480 ticks per beat
+                readingPauseTicks: readingPauseTicks,
                 tempo: segmentTempo
             ))
         }
