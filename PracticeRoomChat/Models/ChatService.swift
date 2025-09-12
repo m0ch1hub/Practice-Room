@@ -51,16 +51,12 @@ class ChatService: ObservableObject {
     @Published var messages: [ChatMessage] = []
     @Published var isLoading = false
     @Published var selectedModel: AIModel = .tunedModel
-    @Published var useTestingMode = true // Enable testing mode by default for now
     
     private let authService: ServiceAccountAuth
     private lazy var functions = Functions.functions()
-    private var trainingExamples: [TrainingExample] = []
     
     init(authService: ServiceAccountAuth) {
         self.authService = authService
-        // Load training examples for testing mode
-        self.trainingExamples = TrainingDataManager.shared.loadTrainingExamples()
         // Sign in anonymously when service initializes
         Task {
             try? await Auth.auth().signInAnonymously()
@@ -89,8 +85,8 @@ class ChatService: ObservableObject {
     private let projectId = "1078751798332"
     private let location = "us-central1"
     
-    // Endpoint ID for the deployed tuned model
-    private let endpointId = "873596073128493056"
+    // Endpoint ID for the deployed tuned model (09/12/25 Version 1, Checkpoint 10)
+    private let endpointId = "1255355306385342464"
     
     
     func sendMessage(_ message: String) {
@@ -121,38 +117,10 @@ class ChatService: ObservableObject {
     }
     
     func callVertexAI(message: String) async throws -> ChatMessage {
-        if useTestingMode {
-            // Use local training data for testing
-            return getTestResponse(for: message)
-        } else {
-            // Use Firebase backend
-            return try await callBackendAPI(message: message)
-        }
+        // Use Google Cloud Function backend with fine-tuned model
+        return try await callBackendAPI(message: message)
     }
     
-    private func getTestResponse(for message: String) -> ChatMessage {
-        // Find matching training example
-        for example in trainingExamples {
-            if let userContent = example.contents.first(where: { $0.role == "user" }),
-               let userText = userContent.parts.first?.text,
-               userText.lowercased().contains(message.lowercased()) || 
-               message.lowercased().contains(userText.lowercased()) {
-                
-                // Return the model's response
-                if let modelContent = example.contents.first(where: { $0.role == "model" }),
-                   let responseText = modelContent.parts.first?.text {
-                    return ChatMessage(role: "assistant", content: responseText, examples: [])
-                }
-            }
-        }
-        
-        // Default response if no match found
-        return ChatMessage(
-            role: "assistant",
-            content: "I don't have a response for that question yet. Try asking 'What is a major chord?'",
-            examples: []
-        )
-    }
     
     private func callBackendAPI(message: String) async throws -> ChatMessage {
         // Ensure user is authenticated
@@ -168,8 +136,8 @@ class ChatService: ObservableObject {
         let token = try await Auth.auth().currentUser?.getIDToken()
         Logger.shared.api("Got ID token for backend call")
         
-        // Call Firebase Function via HTTP (using fine-tuned model endpoint)
-        let functionURL = "https://us-central1-practice-room-869ad.cloudfunctions.net/musicTheoryChat"
+        // Call Google Cloud Function via HTTP (using fine-tuned model endpoint)
+        let functionURL = "https://us-central1-gen-lang-client-0477203387.cloudfunctions.net/musicTheoryChat"
         guard let url = URL(string: functionURL) else {
             throw APIError.invalidURL
         }
@@ -177,7 +145,7 @@ class ChatService: ObservableObject {
         var request = URLRequest(url: url)
         request.httpMethod = "POST"
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
-        request.setValue("Cb1k3kbIFJCbdtomV8bQKLWXAZ2pwE+dA62GwZRpdRQ=", forHTTPHeaderField: "X-API-Key")
+        request.setValue("5H7slvuj3zafDkQZi12V8xzMuwY2oaE5ATO7Lxejx+c=", forHTTPHeaderField: "X-API-Key")
         
         let body = ["message": message]
         request.httpBody = try JSONSerialization.data(withJSONObject: body)

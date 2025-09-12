@@ -6,7 +6,7 @@ const axios = require('axios');
 const PROJECT_ID = '1078751798332';
 const LOCATION = 'us-central1';
 // Update this with your tuned model's endpoint ID after deployment
-const ENDPOINT_ID = process.env.TUNED_MODEL_ENDPOINT_ID || '873596073128493056';
+const ENDPOINT_ID = process.env.TUNED_MODEL_ENDPOINT_ID || '1255355306385342464';
 
 // Initialize auth client
 const auth = new GoogleAuth({
