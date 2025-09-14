@@ -13,8 +13,6 @@ class SoundEngine: ObservableObject {
     private var sampler: AVAudioUnitSampler
     private var reverb: AVAudioUnitReverb
     private var delay: AVAudioUnitDelay
-    // private var midiSequencer: MIDISequencer?
-    // private var midiSequencer: MIDISequencerSimple?
     private var avSequencer: AVSequencer?
     
     private init() {
@@ -28,9 +26,6 @@ class SoundEngine: ObservableObject {
         // Use AVAudioSequencer for proper timing
         if #available(iOS 13.0, *) {
             avSequencer = AVSequencer(engine: audioEngine, sampler: sampler)
-        } else {
-            // Fallback for older iOS versions
-            // midiSequencer = MIDISequencerSimple(engine: audioEngine, sampler: sampler)
         }
     }
     
@@ -135,13 +130,11 @@ class SoundEngine: ObservableObject {
         sampler.startNote(UInt8(note.midi), withVelocity: velocity, onChannel: 0)
         DispatchQueue.main.async { [weak self] in
             self?.currentlyPlayingNotes.insert(note.midi)
-            print("SoundEngine - Added note \(note.midi) to currentlyPlayingNotes: \(self?.currentlyPlayingNotes ?? [])")
         }
 
         DispatchQueue.main.asyncAfter(deadline: .now() + duration) { [weak self] in
             self?.sampler.stopNote(UInt8(note.midi), onChannel: 0)
             self?.currentlyPlayingNotes.remove(note.midi)
-            print("SoundEngine - Removed note \(note.midi) from currentlyPlayingNotes: \(self?.currentlyPlayingNotes ?? [])")
         }
     }
     

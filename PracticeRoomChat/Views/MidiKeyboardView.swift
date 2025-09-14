@@ -39,7 +39,6 @@ struct MidiKeyboardView: View {
     var body: some View {
         // Only the keyboard itself; no surrounding card or animated arrows.
         GeometryReader { geometry in
-            let _ = print("MidiKeyboardView - midiNotes: \(midiNotes), range: \(minNote)-\(maxNote)")
             let whiteKeys = calculateWhiteKeys()
             let keyWidth = geometry.size.width / CGFloat(whiteKeys.count)
 
