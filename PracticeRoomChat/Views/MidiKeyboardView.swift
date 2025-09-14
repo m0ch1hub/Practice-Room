@@ -71,6 +71,10 @@ struct MidiKeyboardView: View {
                     }
                 }
             }
+            .overlay(
+                RoundedRectangle(cornerRadius: 4)
+                    .stroke(Color.black, lineWidth: 2)
+            )
         }
     }
     
@@ -117,7 +121,7 @@ struct WhiteKey: View {
                 .fill(Color.white)
                 .overlay(
                     RoundedRectangle(cornerRadius: 3)
-                        .stroke(Color.gray.opacity(0.35), lineWidth: 0.6)
+                        .stroke(Color.black.opacity(0.45), lineWidth: 0.8)
                 )
 
             // Show note name at the bottom when highlighted
