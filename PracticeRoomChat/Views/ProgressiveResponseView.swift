@@ -203,11 +203,12 @@ struct ProgressiveResponseView: View {
             }
         }
         
-        // Wait for reading pause (convert ticks to seconds)
+        // Always wait for full text reading time before playing audio
+        // This ensures users can read the entire segment regardless of where MIDI elements appear
         let pauseSeconds = Double(segment.readingPauseTicks) / Double(SoundEngine.defaultTicksPerBeat) * (60.0 / segment.tempo)
         DispatchQueue.main.asyncAfter(deadline: .now() + pauseSeconds) {
             if !segment.audioElements.isEmpty {
-                // Play all audio elements in sequence
+                // After full reading time, play all audio elements in sequence
                 playSegmentAudio(segment)
             } else {
                 // No audio, move to next segment
