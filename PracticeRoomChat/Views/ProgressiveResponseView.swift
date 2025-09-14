@@ -140,7 +140,6 @@ struct ProgressiveResponse {
 // MARK: - Main Progressive Response View
 struct ProgressiveResponseView: View {
     let response: ProgressiveResponse
-    @Binding var highlightedNotes: Set<Int>
     var scrollProxy: ScrollViewProxy? = nil
     var messageId: UUID? = nil
     @StateObject private var soundEngine = SoundEngine.shared
@@ -234,7 +233,6 @@ struct ProgressiveResponseView: View {
         // Move to next segment after all audio
         DispatchQueue.main.asyncAfter(deadline: .now() + totalDelay) {
             withAnimation {
-                highlightedNotes.removeAll()
                 playingAudioId = nil
             }
             currentSegmentIndex += 1
@@ -243,12 +241,8 @@ struct ProgressiveResponseView: View {
     }
     
     private func playAudioElement(_ element: ResponseSegment.AudioElement, segmentId: UUID, tempo: Double = 120.0) {
-        // Extract all unique notes for keyboard highlighting
-        let allNotes = Set(element.events.map { $0.note })
-        
-        // Highlight notes on keyboard
+        // Notes are automatically highlighted by SoundEngine
         withAnimation {
-            highlightedNotes = allNotes
             playingAudioId = segmentId
         }
         
@@ -260,7 +254,6 @@ struct ProgressiveResponseView: View {
             let durationSeconds = Double(element.totalDurationTicks) / Double(SoundEngine.defaultTicksPerBeat) * (60.0 / tempo)
             DispatchQueue.main.asyncAfter(deadline: .now() + durationSeconds) {
                 withAnimation {
-                    highlightedNotes.removeAll()
                     playingAudioId = nil
                 }
             }
@@ -391,8 +384,6 @@ struct WrappingHStack: View {
 // Removed simplified keyboard - using the existing beautiful MidiKeyboardView instead
 
 #Preview {
-    @State var highlightedNotes: Set<Int> = []
-    
     return ScrollView {
         VStack(alignment: .leading, spacing: 20) {
             Text("Progressive Response Demo")
@@ -406,13 +397,12 @@ struct WrappingHStack: View {
                 the major third [AUDIO:64:1.0:E (major third)]
                 and the perfect fifth [AUDIO:67:1.0:G (perfect fifth)]
                 Together they create [AUDIO:60,64,67:2.0:C Major Chord]
-                """),
-                highlightedNotes: .constant([])
+                """)
             )
-            
+
             // Show keyboard in preview
             MidiKeyboardView(
-                midiNotes: Array(highlightedNotes),
+                midiNotes: Array(SoundEngine.shared.currentlyPlayingNotes),
                 showLabels: true,
                 octaves: 1
             )

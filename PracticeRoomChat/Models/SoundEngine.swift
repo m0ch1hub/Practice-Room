@@ -5,7 +5,9 @@ import AudioToolbox
 
 class SoundEngine: ObservableObject {
     static let shared = SoundEngine()
-    
+
+    @Published var currentlyPlayingNotes: Set<Int> = []
+
     private var audioEngine: AVAudioEngine
     private var sampler: AVAudioUnitSampler
     private var reverb: AVAudioUnitReverb
@@ -34,9 +36,13 @@ class SoundEngine: ObservableObject {
     // Simple methods for slide view
     func playNote(midiNote: Int, duration: Double) {
         sampler.startNote(UInt8(midiNote), withVelocity: 80, onChannel: 0)
-        
+        DispatchQueue.main.async { [weak self] in
+            self?.currentlyPlayingNotes.insert(midiNote)
+        }
+
         DispatchQueue.main.asyncAfter(deadline: .now() + duration) { [weak self] in
             self?.sampler.stopNote(UInt8(midiNote), onChannel: 0)
+            self?.currentlyPlayingNotes.remove(midiNote)
         }
     }
     
@@ -44,10 +50,16 @@ class SoundEngine: ObservableObject {
         for note in midiNotes {
             sampler.startNote(UInt8(note), withVelocity: 80, onChannel: 0)
         }
-        
+        DispatchQueue.main.async { [weak self] in
+            for note in midiNotes {
+                self?.currentlyPlayingNotes.insert(note)
+            }
+        }
+
         DispatchQueue.main.asyncAfter(deadline: .now() + duration) { [weak self] in
             for note in midiNotes {
                 self?.sampler.stopNote(UInt8(note), onChannel: 0)
+                self?.currentlyPlayingNotes.remove(note)
             }
         }
     }
@@ -120,9 +132,15 @@ class SoundEngine: ObservableObject {
     func playNote(_ note: Note, duration: TimeInterval = 0.5, velocity: UInt8 = 80) {
         Logger.shared.audio("Playing note: \(note.name) (MIDI: \(note.midi)) for \(duration)s")
         sampler.startNote(UInt8(note.midi), withVelocity: velocity, onChannel: 0)
-        
+        DispatchQueue.main.async { [weak self] in
+            self?.currentlyPlayingNotes.insert(note.midi)
+            print("SoundEngine - Added note \(note.midi) to currentlyPlayingNotes: \(self?.currentlyPlayingNotes ?? [])")
+        }
+
         DispatchQueue.main.asyncAfter(deadline: .now() + duration) { [weak self] in
             self?.sampler.stopNote(UInt8(note.midi), onChannel: 0)
+            self?.currentlyPlayingNotes.remove(note.midi)
+            print("SoundEngine - Removed note \(note.midi) from currentlyPlayingNotes: \(self?.currentlyPlayingNotes ?? [])")
         }
     }
     
@@ -131,10 +149,16 @@ class SoundEngine: ObservableObject {
         for note in chord.notes {
             sampler.startNote(UInt8(note.midi), withVelocity: velocity, onChannel: 0)
         }
-        
+        DispatchQueue.main.async { [weak self] in
+            for note in chord.notes {
+                self?.currentlyPlayingNotes.insert(note.midi)
+            }
+        }
+
         DispatchQueue.main.asyncAfter(deadline: .now() + duration) { [weak self] in
             for note in chord.notes {
                 self?.sampler.stopNote(UInt8(note.midi), onChannel: 0)
+                self?.currentlyPlayingNotes.remove(note.midi)
             }
         }
     }
@@ -166,10 +190,16 @@ class SoundEngine: ObservableObject {
         if simultaneous {
             sampler.startNote(UInt8(note1.midi), withVelocity: 80, onChannel: 0)
             sampler.startNote(UInt8(note2.midi), withVelocity: 80, onChannel: 0)
-            
+            DispatchQueue.main.async { [weak self] in
+                self?.currentlyPlayingNotes.insert(note1.midi)
+                self?.currentlyPlayingNotes.insert(note2.midi)
+            }
+
             DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) { [weak self] in
                 self?.sampler.stopNote(UInt8(note1.midi), onChannel: 0)
                 self?.sampler.stopNote(UInt8(note2.midi), onChannel: 0)
+                self?.currentlyPlayingNotes.remove(note1.midi)
+                self?.currentlyPlayingNotes.remove(note2.midi)
             }
         } else {
             playNote(note1, duration: 0.5)
@@ -196,11 +226,14 @@ class SoundEngine: ObservableObject {
         if #available(iOS 13.0, *) {
             avSequencer?.stop()
         }
-        
+
         // Stop all individual notes
         for midi in 0...127 {
             sampler.stopNote(UInt8(midi), onChannel: 0)
         }
+
+        // Clear the playing notes set
+        currentlyPlayingNotes.removeAll()
     }
     
     // MARK: - Unified Timed Event System (Tick-based)
@@ -232,13 +265,10 @@ class SoundEngine: ObservableObject {
     /// Play a sequence of timed note events using AVAudioSequencer for accurate timing
     func playTimedSequence(_ events: [NoteEvent], tempo: Double = defaultTempo) {
         Logger.shared.audio("Playing timed sequence with \(events.count) events at \(tempo) BPM")
-        
-        // Use AVAudioSequencer for accurate playback
-        if #available(iOS 13.0, *) {
-            avSequencer?.playEvents(events, tempo: tempo)
-        } else {
-            Logger.shared.error("AVAudioSequencer requires iOS 13.0 or later")
-        }
+
+        // Use legacy method for now to ensure currentlyPlayingNotes is updated
+        // AVSequencer doesn't update our playing notes tracking
+        playTimedSequenceLegacy(events, tempo: tempo)
     }
     
     /// Create MIDI file data from note events
@@ -362,10 +392,12 @@ class SoundEngine: ObservableObject {
             // Schedule note to start
             DispatchQueue.main.asyncAfter(deadline: .now() + startTime) { [weak self] in
                 self?.sampler.startNote(UInt8(event.note), withVelocity: event.velocity, onChannel: 0)
-                
+                self?.currentlyPlayingNotes.insert(event.note)
+
                 // Schedule note to stop
                 DispatchQueue.main.asyncAfter(deadline: .now() + duration) { [weak self] in
                     self?.sampler.stopNote(UInt8(event.note), onChannel: 0)
+                    self?.currentlyPlayingNotes.remove(event.note)
                 }
             }
         }

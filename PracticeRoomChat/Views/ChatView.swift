@@ -5,7 +5,6 @@ struct ChatView: View {
     @StateObject private var soundEngine = SoundEngine.shared
     @State private var messageText = ""
     @FocusState private var isTextFieldFocused: Bool
-    @State private var highlightedNotes: Set<Int> = []
     @State private var showingExamplesMenu = false
     @State private var detailedQuestions: [String] = []
     @State private var simpleQuestions: [String] = []
@@ -29,7 +28,6 @@ struct ChatView: View {
                         ForEach(chatService.messages) { message in
                             ChatMessageView(
                                 message: message,
-                                highlightedNotes: $highlightedNotes,
                                 scrollProxy: proxy
                             )
                             .id(message.id)
@@ -94,7 +92,7 @@ struct ChatView: View {
                 
                 // Piano keyboard - always visible (1 octave)
                 MidiKeyboardView(
-                    midiNotes: Array(highlightedNotes),
+                    midiNotes: Array(soundEngine.currentlyPlayingNotes),
                     showLabels: true,
                     octaves: 1
                 )
@@ -207,9 +205,8 @@ struct ChatView: View {
 
 struct ChatMessageView: View {
     let message: ChatMessage
-    @Binding var highlightedNotes: Set<Int>
     let scrollProxy: ScrollViewProxy
-    
+
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
             if message.role == "user" {
@@ -223,7 +220,6 @@ struct ChatMessageView: View {
                 // Assistant response with progressive reveal
                 ProgressiveResponseView(
                     response: ProgressiveResponse.parse(message.content),
-                    highlightedNotes: $highlightedNotes,
                     scrollProxy: scrollProxy,
                     messageId: message.id
                 )

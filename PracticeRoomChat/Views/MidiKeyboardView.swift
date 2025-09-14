@@ -36,6 +36,7 @@ struct MidiKeyboardView: View {
     var body: some View {
         // Only the keyboard itself; no surrounding card or animated arrows.
         GeometryReader { geometry in
+            let _ = print("MidiKeyboardView - midiNotes: \(midiNotes)")
             ZStack(alignment: .topLeading) {
                 // White keys row
                 HStack(spacing: 0) {
@@ -98,18 +99,15 @@ struct WhiteKey: View {
     let isHighlighted: Bool
     let showLabel: Bool
     let width: CGFloat
-    
+
     private var noteName: String {
         let names = ["C", "D", "E", "F", "G", "A", "B"]
         let noteClass = noteNumber % 12
         let nameIndex = [0: 0, 2: 1, 4: 2, 5: 3, 7: 4, 9: 5, 11: 6][noteClass] ?? 0
         return names[nameIndex]
     }
-    
+
     var body: some View {
-        // Flat white key with a subtle outline. If highlighted, we tint the
-        // key with a light accent overlay. We only label the C keys to avoid
-        // visual noise.
         ZStack(alignment: .bottom) {
             RoundedRectangle(cornerRadius: 3)
                 .fill(Color.white)
@@ -117,15 +115,13 @@ struct WhiteKey: View {
                     RoundedRectangle(cornerRadius: 3)
                         .stroke(Color.gray.opacity(0.35), lineWidth: 0.6)
                 )
-                .overlay(
-                    RoundedRectangle(cornerRadius: 3)
-                        .fill(Color.blue.opacity(isHighlighted ? 0.18 : 0.0))
-                )
-            if showLabel && noteNumber % 12 == 0 { // Only show C labels
-                Text("C\(noteNumber / 12 - 1)")
-                    .font(.system(size: 10, weight: .medium))
-                    .foregroundColor(isHighlighted ? Color.blue : .secondary)
-                    .padding(.bottom, 6)
+
+            // Show note name at the bottom when highlighted
+            if isHighlighted {
+                Text(noteName)
+                    .font(.system(size: 16, weight: .bold))
+                    .foregroundColor(.black)
+                    .padding(.bottom, 8)
             }
         }
         .frame(width: width)
@@ -137,19 +133,32 @@ struct BlackKey: View {
     let isHighlighted: Bool
     let width: CGFloat
     let height: CGFloat
-    
+
+    private var noteName: String {
+        // Map black keys to their sharp names
+        let noteClass = noteNumber % 12
+        let sharpNames = [1: "C♯", 3: "D♯", 6: "F♯", 8: "G♯", 10: "A♯"]
+        return sharpNames[noteClass] ?? ""
+    }
+
     var body: some View {
-        RoundedRectangle(cornerRadius: 2)
-            .fill(Color.black)
-            .frame(width: width, height: height)
-            .overlay(
-                RoundedRectangle(cornerRadius: 2)
-                    .stroke(Color.black.opacity(0.8), lineWidth: 0.6)
-            )
-            .overlay(
-                RoundedRectangle(cornerRadius: 2)
-                    .fill(Color.blue.opacity(isHighlighted ? 0.22 : 0.0))
-            )
+        ZStack(alignment: .bottom) {
+            RoundedRectangle(cornerRadius: 2)
+                .fill(Color.black)
+                .frame(width: width, height: height)
+                .overlay(
+                    RoundedRectangle(cornerRadius: 2)
+                        .stroke(Color.black.opacity(0.8), lineWidth: 0.6)
+                )
+
+            // Show note name in white at the bottom when highlighted
+            if isHighlighted {
+                Text(noteName)
+                    .font(.system(size: 12, weight: .bold))
+                    .foregroundColor(.white)
+                    .padding(.bottom, 6)
+            }
+        }
     }
 }
 
