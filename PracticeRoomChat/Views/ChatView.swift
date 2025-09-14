@@ -7,7 +7,8 @@ struct ChatView: View {
     @FocusState private var isTextFieldFocused: Bool
     @State private var highlightedNotes: Set<Int> = []
     @State private var showingExamplesMenu = false
-    @State private var availableQuestions: [String] = []
+    @State private var detailedQuestions: [String] = []
+    @State private var simpleQuestions: [String] = []
     @State private var showingSettings = false
     // Removed showSlidesView state
     
@@ -110,12 +111,25 @@ struct ChatView: View {
                 // Simple bottom bar with ultraThinMaterial
                 HStack(spacing: 12) {
                     Menu {
-                        ForEach(availableQuestions, id: \.self) { question in
-                            Button(action: {
-                                messageText = question
-                                sendMessage()
-                            }) {
-                                Text(question)
+                        Section("📚 Detailed Explanations") {
+                            ForEach(detailedQuestions, id: \.self) { question in
+                                Button(action: {
+                                    messageText = question
+                                    sendMessage()
+                                }) {
+                                    Text(question)
+                                }
+                            }
+                        }
+                        
+                        Section("🎵 Simple Playback") {
+                            ForEach(simpleQuestions, id: \.self) { question in
+                                Button(action: {
+                                    messageText = question
+                                    sendMessage()
+                                }) {
+                                    Text(question)
+                                }
                             }
                         }
                     } label: {
@@ -163,8 +177,19 @@ struct ChatView: View {
     private func loadAvailableQuestions() {
         // Load questions from training data
         let examples = TrainingDataManager.shared.loadTrainingExamples()
-        availableQuestions = examples.compactMap { example in
+        
+        // Get all user prompts
+        let allQuestions = examples.compactMap { example in
             example.contents.first(where: { $0.role == "user" })?.parts.first?.text
+        }
+        
+        // Separate into detailed (questions) and simple (commands)
+        detailedQuestions = allQuestions.filter { question in
+            question.lowercased().starts(with: "what")
+        }
+        
+        simpleQuestions = allQuestions.filter { question in
+            question.lowercased().starts(with: "play")
         }
     }
     
