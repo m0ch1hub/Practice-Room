@@ -65,7 +65,6 @@ struct MidiKeyboardView: View {
                 }
             }
         }
-        .frame(height: 100)
     }
     
     private func whiteKeyMidiNumber(for index: Int) -> Int {

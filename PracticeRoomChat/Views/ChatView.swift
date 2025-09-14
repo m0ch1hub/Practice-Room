@@ -40,9 +40,9 @@ struct ChatView: View {
                                 .id("loading")
                         }
                         
-                        // Bottom anchor for scrolling - increased height for piano visibility
+                        // Bottom anchor for scrolling - adjusted for piano visibility
                         Color.clear
-                            .frame(height: 200) // Increased from 90 to account for piano height
+                            .frame(height: 280) // Adjusted for taller piano
                             .id("bottom")
                     }
                     .padding(.horizontal, 20)
@@ -98,8 +98,9 @@ struct ChatView: View {
                     showLabels: true,
                     octaves: 1
                 )
-                .frame(height: 100)
-                .padding(.horizontal, 10)
+                .frame(height: 180)
+                .frame(maxWidth: 300) // Limit width to make it more compact
+                .padding(.horizontal, 20)
                 .padding(.bottom, 8)
                 
                 if chatService.messages.isEmpty {
