@@ -26,6 +26,9 @@ class AVSequencer {
         currentEvents = events
         currentTempo = tempo
 
+        // Analyze note range and update keyboard before playback
+        updateKeyboardRange(for: events)
+
         // Create a temporary MIDI file from the events
         if let midiFileURL = createMIDIFile(from: events, tempo: tempo) {
             do {
@@ -183,6 +186,11 @@ class AVSequencer {
 
         // Clear playing notes
         SoundEngine.shared.currentlyPlayingNotes.removeAll()
+
+        // Reset keyboard range to default C4-B4
+        DispatchQueue.main.async {
+            SoundEngine.shared.keyboardRange = (60, 71)
+        }
     }
 
     private func startPositionTracking() {
@@ -225,6 +233,49 @@ class AVSequencer {
         // Update the shared SoundEngine's playing notes on main thread
         DispatchQueue.main.async {
             SoundEngine.shared.currentlyPlayingNotes = activeNotes
+        }
+    }
+
+    private func updateKeyboardRange(for events: [SoundEngine.NoteEvent]) {
+        guard !events.isEmpty else { return }
+
+        // Find min and max notes in the sequence
+        let notes = events.map { $0.note }
+        var minNote = notes.min() ?? 60
+        var maxNote = notes.max() ?? 71
+
+        // Ensure minimum range of C4-B4 (60-71)
+        // If the range is smaller than this, expand it
+        if minNote >= 60 && maxNote <= 71 {
+            // Notes are within C4-B4, just show the default range
+            minNote = 60
+            maxNote = 71
+        } else {
+            // Notes extend beyond C4-B4, show the full range needed
+
+            // If highest/lowest note is a black key, include adjacent white key for visual completeness
+            // Black keys are: C#(1), D#(3), F#(6), G#(8), A#(10) in each octave
+            let minNoteClass = minNote % 12
+            let maxNoteClass = maxNote % 12
+
+            // If min is a black key, go down to the white key below
+            if [1, 3, 6, 8, 10].contains(minNoteClass) {
+                minNote -= 1
+            }
+
+            // If max is a black key, go up to the white key above
+            if [1, 3, 6, 8, 10].contains(maxNoteClass) {
+                maxNote += 1
+            }
+
+            // Still ensure we show at least C4-B4 range
+            minNote = min(minNote, 60)
+            maxNote = max(maxNote, 71)
+        }
+
+        // Update keyboard range on main thread
+        DispatchQueue.main.async {
+            SoundEngine.shared.keyboardRange = (minNote, maxNote)
         }
     }
     

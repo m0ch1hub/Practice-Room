@@ -7,6 +7,7 @@ class SoundEngine: ObservableObject {
     static let shared = SoundEngine()
 
     @Published var currentlyPlayingNotes: Set<Int> = []
+    @Published var keyboardRange: (minNote: Int, maxNote: Int) = (60, 71) // Default C4-B4
 
     private var audioEngine: AVAudioEngine
     private var sampler: AVAudioUnitSampler

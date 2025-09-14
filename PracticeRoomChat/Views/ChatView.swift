@@ -90,11 +90,12 @@ struct ChatView: View {
             VStack(spacing: 0) {
                 Spacer()
                 
-                // Piano keyboard - always visible (1 octave)
+                // Piano keyboard - always visible with dynamic range
                 MidiKeyboardView(
                     midiNotes: Array(soundEngine.currentlyPlayingNotes),
                     showLabels: true,
-                    octaves: 1
+                    minNote: soundEngine.keyboardRange.minNote,
+                    maxNote: soundEngine.keyboardRange.maxNote
                 )
                 .frame(height: 180)
                 .frame(maxWidth: 300) // Limit width to make it more compact

@@ -9,9 +9,10 @@ import SwiftUI
 struct MidiKeyboardView: View {
     let midiNotes: [Int]
     let showLabels: Bool
-    let octaves: Int
-    
-    init(midiContent: String, showLabels: Bool = true, octaves: Int = 1) {
+    let minNote: Int
+    let maxNote: Int
+
+    init(midiContent: String, showLabels: Bool = true, minNote: Int = 60, maxNote: Int = 71) {
         // Parse MIDI:60,64,67:2.0s format
         if midiContent.hasPrefix("MIDI:") {
             let components = midiContent.dropFirst(5).components(separatedBy: ":")
@@ -24,43 +25,48 @@ struct MidiKeyboardView: View {
             self.midiNotes = []
         }
         self.showLabels = showLabels
-        self.octaves = max(1, octaves)
+        self.minNote = minNote
+        self.maxNote = maxNote
     }
-    
-    init(midiNotes: [Int], showLabels: Bool = true, octaves: Int = 1) {
+
+    init(midiNotes: [Int], showLabels: Bool = true, minNote: Int = 60, maxNote: Int = 71) {
         self.midiNotes = midiNotes
         self.showLabels = showLabels
-        self.octaves = max(1, octaves)
+        self.minNote = minNote
+        self.maxNote = maxNote
     }
     
     var body: some View {
         // Only the keyboard itself; no surrounding card or animated arrows.
         GeometryReader { geometry in
-            let _ = print("MidiKeyboardView - midiNotes: \(midiNotes)")
+            let _ = print("MidiKeyboardView - midiNotes: \(midiNotes), range: \(minNote)-\(maxNote)")
+            let whiteKeys = calculateWhiteKeys()
+            let keyWidth = geometry.size.width / CGFloat(whiteKeys.count)
+
             ZStack(alignment: .topLeading) {
                 // White keys row
                 HStack(spacing: 0) {
-                    ForEach(0..<(octaves * 7), id: \.self) { index in
+                    ForEach(whiteKeys, id: \.self) { noteNumber in
                         WhiteKey(
-                            noteNumber: whiteKeyMidiNumber(for: index),
-                            isHighlighted: midiNotes.contains(whiteKeyMidiNumber(for: index)),
+                            noteNumber: noteNumber,
+                            isHighlighted: midiNotes.contains(noteNumber),
                             showLabel: showLabels,
-                            width: geometry.size.width / CGFloat(octaves * 7)
+                            width: keyWidth
                         )
                     }
                 }
-                
+
                 // Black keys overlayed above the whites
                 ZStack(alignment: .topLeading) {
-                    ForEach(0..<(octaves * 7), id: \.self) { index in
-                        if shouldShowBlackKey(afterWhiteIndex: index) {
+                    ForEach(Array(whiteKeys.enumerated()), id: \.offset) { index, whiteNote in
+                        if let blackNote = blackKeyAfterWhite(whiteNote), blackNote <= maxNote {
                             BlackKey(
-                                noteNumber: blackKeyMidiNumber(afterWhiteIndex: index),
-                                isHighlighted: midiNotes.contains(blackKeyMidiNumber(afterWhiteIndex: index)),
-                                width: geometry.size.width / CGFloat(octaves * 7) * 0.6,
+                                noteNumber: blackNote,
+                                isHighlighted: midiNotes.contains(blackNote),
+                                width: keyWidth * 0.6,
                                 height: geometry.size.height * 0.64
                             )
-                            .offset(x: blackKeyOffset(afterWhiteIndex: index, keyWidth: geometry.size.width / CGFloat(octaves * 7)))
+                            .offset(x: CGFloat(index + 1) * keyWidth - (keyWidth * 0.6 / 2))
                         }
                     }
                 }
@@ -68,29 +74,27 @@ struct MidiKeyboardView: View {
         }
     }
     
-    private func whiteKeyMidiNumber(for index: Int) -> Int {
-        let whiteKeyPattern = [0, 2, 4, 5, 7, 9, 11] // C, D, E, F, G, A, B
-        // MIDI 60 = C4, so we want octave 5 in MIDI numbering (60/12 = 5)
-        let octave = 5 // This gives us C4 (60) to B4 (71)
-        let noteInOctave = whiteKeyPattern[index % 7]
-        return (octave * 12) + noteInOctave
+    private func calculateWhiteKeys() -> [Int] {
+        var whiteKeys: [Int] = []
+
+        for note in minNote...maxNote {
+            let noteClass = note % 12
+            // White keys are C(0), D(2), E(4), F(5), G(7), A(9), B(11)
+            if [0, 2, 4, 5, 7, 9, 11].contains(noteClass) {
+                whiteKeys.append(note)
+            }
+        }
+
+        return whiteKeys
     }
-    
-    private func blackKeyMidiNumber(afterWhiteIndex index: Int) -> Int {
-        // Black key after a given white key is one semitone up
-        return whiteKeyMidiNumber(for: index) + 1
-    }
-    
-    private func shouldShowBlackKey(afterWhiteIndex index: Int) -> Bool {
-        // Show black keys after C, D, F, G, A within each octave
-        let pos = index % 7
-        return pos == 0 || pos == 1 || pos == 3 || pos == 4 || pos == 5
-    }
-    
-    private func blackKeyOffset(afterWhiteIndex index: Int, keyWidth: CGFloat) -> CGFloat {
-        // Centered on the boundary to the right of the white key at `index`
-        let blackKeyWidth = keyWidth * 0.6
-        return CGFloat(index + 1) * keyWidth - (blackKeyWidth / 2)
+
+    private func blackKeyAfterWhite(_ whiteNote: Int) -> Int? {
+        let noteClass = whiteNote % 12
+        // Black keys exist after C(0), D(2), F(5), G(7), A(9)
+        if [0, 2, 5, 7, 9].contains(noteClass) {
+            return whiteNote + 1
+        }
+        return nil
     }
 }
 
@@ -165,16 +169,19 @@ struct BlackKey: View {
 
 #Preview {
     VStack(spacing: 20) {
-        // Single note
+        // Default range C4-B4
         MidiKeyboardView(midiContent: "MIDI:60:1.0s")
+            .frame(height: 100)
             .padding()
-        
-        // Chord
+
+        // Extended range C2-G5
+        MidiKeyboardView(midiContent: "MIDI:36,79:2.0s", minNote: 36, maxNote: 79)
+            .frame(height: 100)
+            .padding()
+
+        // Chord in normal range
         MidiKeyboardView(midiContent: "MIDI:60,64,67:2.0s")
-            .padding()
-        
-        // Interval
-        MidiKeyboardView(midiContent: "MIDI:60,67:1.5s")
+            .frame(height: 100)
             .padding()
     }
 }

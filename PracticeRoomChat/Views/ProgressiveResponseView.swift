@@ -384,7 +384,7 @@ struct WrappingHStack: View {
 // Removed simplified keyboard - using the existing beautiful MidiKeyboardView instead
 
 #Preview {
-    return ScrollView {
+    ScrollView {
         VStack(alignment: .leading, spacing: 20) {
             Text("Progressive Response Demo")
                 .font(.title2)
@@ -403,8 +403,7 @@ struct WrappingHStack: View {
             // Show keyboard in preview
             MidiKeyboardView(
                 midiNotes: Array(SoundEngine.shared.currentlyPlayingNotes),
-                showLabels: true,
-                octaves: 1
+                showLabels: true
             )
             .frame(height: 100)
         }
