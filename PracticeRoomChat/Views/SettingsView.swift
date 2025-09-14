@@ -2,8 +2,10 @@ import SwiftUI
 
 struct SettingsView: View {
     @AppStorage("useLocalTrainingData") private var useLocalTrainingData = false
+    @AppStorage("selectedSoundFont") private var selectedSoundFont = SoundEngine.SoundFont.yamaha.rawValue
     @Environment(\.dismiss) private var dismiss
-    
+    @StateObject private var soundEngine = SoundEngine.shared
+
     var body: some View {
         NavigationView {
             Form {
@@ -27,6 +29,26 @@ struct SettingsView: View {
                 }
                 
                 Section {
+                    Picker("Sound", selection: $selectedSoundFont) {
+                        ForEach(SoundEngine.SoundFont.allCases, id: \.rawValue) { soundFont in
+                            Text(soundFont.rawValue).tag(soundFont.rawValue)
+                        }
+                    }
+                    .onChange(of: selectedSoundFont) { newValue in
+                        if let soundFont = SoundEngine.SoundFont.allCases.first(where: { $0.rawValue == newValue }) {
+                            soundEngine.switchSoundFont(to: soundFont)
+                        }
+                    }
+                } header: {
+                    Text("Audio")
+                } footer: {
+                    Text(selectedSoundFont == SoundEngine.SoundFont.yamaha.rawValue ?
+                         "Classic grand piano sound" :
+                         "Vintage electric piano sound")
+                        .font(.caption)
+                }
+
+                Section {
                     HStack {
                         Text("Model Endpoint")
                         Spacer()
@@ -34,7 +56,7 @@ struct SettingsView: View {
                             .font(.caption)
                             .foregroundColor(.secondary)
                     }
-                    
+
                     HStack {
                         Text("Project ID")
                         Spacer()

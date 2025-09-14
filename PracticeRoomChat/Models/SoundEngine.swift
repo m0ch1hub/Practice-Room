@@ -8,13 +8,26 @@ class SoundEngine: ObservableObject {
 
     @Published var currentlyPlayingNotes: Set<Int> = []
     @Published var keyboardRange: (minNote: Int, maxNote: Int) = (60, 71) // Default C4-B4
+    @Published var currentSoundFont: SoundFont = .yamaha
 
     private var audioEngine: AVAudioEngine
     private var sampler: AVAudioUnitSampler
     private var reverb: AVAudioUnitReverb
     private var delay: AVAudioUnitDelay
     private var avSequencer: AVSequencer?
-    
+
+    enum SoundFont: String, CaseIterable {
+        case yamaha = "Yamaha C7 Piano"
+        case rhodes = "jRhodes3 Electric Piano"
+
+        var fileName: String {
+            switch self {
+            case .yamaha: return "Yamaha_C7__Normalized_"
+            case .rhodes: return "jRhodes3"
+            }
+        }
+    }
+
     private init() {
         audioEngine = AVAudioEngine()
         sampler = AVAudioUnitSampler()
@@ -88,11 +101,25 @@ class SoundEngine: ObservableObject {
         }
     }
     
+    func switchSoundFont(to soundFont: SoundFont) {
+        currentSoundFont = soundFont
+        loadSoundFont()
+
+        // Save preference
+        UserDefaults.standard.set(soundFont.rawValue, forKey: "selectedSoundFont")
+    }
+
     private func loadSoundFont() {
-        Logger.shared.audio("Attempting to load SoundFont")
-        
-        guard let soundFontURL = Bundle.main.url(forResource: "Yamaha_C7__Normalized_", withExtension: "sf2") else {
-            Logger.shared.audio("No SoundFont found, falling back to default instrument")
+        Logger.shared.audio("Attempting to load SoundFont: \(currentSoundFont.fileName)")
+
+        // Load saved preference or default
+        if let savedFont = UserDefaults.standard.string(forKey: "selectedSoundFont"),
+           let font = SoundFont.allCases.first(where: { $0.rawValue == savedFont }) {
+            currentSoundFont = font
+        }
+
+        guard let soundFontURL = Bundle.main.url(forResource: currentSoundFont.fileName, withExtension: "sf2") else {
+            Logger.shared.audio("No SoundFont found for \(currentSoundFont.fileName), falling back to default instrument")
             loadDefaultInstrument()
             return
         }
@@ -122,96 +149,6 @@ class SoundEngine: ObservableObject {
             Logger.shared.audio("Default instrument loaded successfully")
         } catch {
             Logger.shared.error("Default instrument failed: \(error)")
-        }
-    }
-    
-    func playNote(_ note: Note, duration: TimeInterval = 0.5, velocity: UInt8 = 80) {
-        Logger.shared.audio("Playing note: \(note.name) (MIDI: \(note.midi)) for \(duration)s")
-        sampler.startNote(UInt8(note.midi), withVelocity: velocity, onChannel: 0)
-        DispatchQueue.main.async { [weak self] in
-            self?.currentlyPlayingNotes.insert(note.midi)
-        }
-
-        DispatchQueue.main.asyncAfter(deadline: .now() + duration) { [weak self] in
-            self?.sampler.stopNote(UInt8(note.midi), onChannel: 0)
-            self?.currentlyPlayingNotes.remove(note.midi)
-        }
-    }
-    
-    func playChord(_ chord: Chord, duration: TimeInterval = 1.0, velocity: UInt8 = 70) {
-        Logger.shared.audio("Playing chord: \(chord.symbol) (\(chord.notes.count) notes)")
-        for note in chord.notes {
-            sampler.startNote(UInt8(note.midi), withVelocity: velocity, onChannel: 0)
-        }
-        DispatchQueue.main.async { [weak self] in
-            for note in chord.notes {
-                self?.currentlyPlayingNotes.insert(note.midi)
-            }
-        }
-
-        DispatchQueue.main.asyncAfter(deadline: .now() + duration) { [weak self] in
-            for note in chord.notes {
-                self?.sampler.stopNote(UInt8(note.midi), onChannel: 0)
-                self?.currentlyPlayingNotes.remove(note.midi)
-            }
-        }
-    }
-    
-    func playScale(_ scale: Scale, tempo: Double = 120) {
-        let noteDuration = 60.0 / tempo
-        Logger.shared.audio("Playing scale: \(scale.root.name) \(scale.type) (\(scale.notes.count) notes, tempo: \(tempo))")
-        
-        for (index, note) in scale.notes.enumerated() {
-            DispatchQueue.main.asyncAfter(deadline: .now() + Double(index) * noteDuration) { [weak self] in
-                self?.playNote(note, duration: noteDuration * 0.9)
-            }
-        }
-    }
-    
-    func playChordProgression(_ chords: [Chord], tempo: Double = 80) {
-        let chordDuration = (60.0 / tempo) * 2
-        let chordNames = chords.map { $0.symbol }.joined(separator: " → ")
-        Logger.shared.audio("Playing chord progression: \(chordNames) (tempo: \(tempo))")
-        
-        for (index, chord) in chords.enumerated() {
-            DispatchQueue.main.asyncAfter(deadline: .now() + Double(index) * chordDuration) { [weak self] in
-                self?.playChord(chord, duration: chordDuration * 0.9)
-            }
-        }
-    }
-    
-    func playInterval(_ note1: Note, _ note2: Note, simultaneous: Bool = false) {
-        if simultaneous {
-            sampler.startNote(UInt8(note1.midi), withVelocity: 80, onChannel: 0)
-            sampler.startNote(UInt8(note2.midi), withVelocity: 80, onChannel: 0)
-            DispatchQueue.main.async { [weak self] in
-                self?.currentlyPlayingNotes.insert(note1.midi)
-                self?.currentlyPlayingNotes.insert(note2.midi)
-            }
-
-            DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) { [weak self] in
-                self?.sampler.stopNote(UInt8(note1.midi), onChannel: 0)
-                self?.sampler.stopNote(UInt8(note2.midi), onChannel: 0)
-                self?.currentlyPlayingNotes.remove(note1.midi)
-                self?.currentlyPlayingNotes.remove(note2.midi)
-            }
-        } else {
-            playNote(note1, duration: 0.5)
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) { [weak self] in
-                self?.playNote(note2, duration: 0.5)
-            }
-        }
-    }
-    
-    func playArpeggio(_ chord: Chord, pattern: [Int] = [0, 1, 2, 1], tempo: Double = 120) {
-        let noteDuration = 60.0 / tempo / 2
-        
-        for (step, noteIndex) in pattern.enumerated() {
-            if noteIndex < chord.notes.count {
-                DispatchQueue.main.asyncAfter(deadline: .now() + Double(step) * noteDuration) { [weak self] in
-                    self?.playNote(chord.notes[noteIndex], duration: noteDuration * 0.9, velocity: 70)
-                }
-            }
         }
     }
     

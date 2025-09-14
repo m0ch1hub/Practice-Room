@@ -165,6 +165,19 @@ struct ChatView: View {
             }
         }
         .background(Color(.systemBackground))
+        .onTapGesture {
+            // Dismiss keyboard when tapping outside
+            isTextFieldFocused = false
+        }
+        .gesture(
+            DragGesture()
+                .onEnded { value in
+                    // Dismiss keyboard on swipe down
+                    if value.translation.height > 50 {
+                        isTextFieldFocused = false
+                    }
+                }
+        )
         .onAppear {
             loadAvailableQuestions()
         }
@@ -198,6 +211,7 @@ struct ChatView: View {
         let message = messageText
         Logger.shared.ui("Sending message from ChatView: '\(message)'")
         messageText = ""
+        isTextFieldFocused = false // Dismiss keyboard
         chatService.sendMessage(message)
     }
     

@@ -47,13 +47,19 @@ class TrainingDataManager {
         #endif
         
         // Production path - load from bundle
-        // First try with folder structure
-        if let bundleURL = Bundle.main.url(forResource: "Training Data/training_data", withExtension: "jsonl") {
-            print("Loading training data from bundle with folder: Training Data/training_data.jsonl")
+        // Try simple_training_data first
+        if let bundleURL = Bundle.main.url(forResource: "simple_training_data", withExtension: "jsonl") {
+            print("Loading simple training data from bundle: simple_training_data.jsonl")
             return bundleURL
         }
-        
-        // Try without folder (if file was added directly to bundle)
+
+        // Try with folder structure
+        if let bundleURL = Bundle.main.url(forResource: "Training Data/simple_training_data", withExtension: "jsonl") {
+            print("Loading training data from bundle with folder: Training Data/simple_training_data.jsonl")
+            return bundleURL
+        }
+
+        // Fall back to original training_data
         if let bundleURL = Bundle.main.url(forResource: "training_data", withExtension: "jsonl") {
             print("Loading training data from bundle root: training_data.jsonl")
             return bundleURL

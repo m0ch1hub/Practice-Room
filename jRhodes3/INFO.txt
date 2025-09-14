@@ -1,0 +1,3 @@
+"jRhodes3.sf2.zip": Full unlooped soundfont, with 65 samples in 5 velocity layers, sampling at least every 4th white key starting at F1.
+"jRhodes3a-looped.sfArk.zip": Looped version of the above.
+"jRhodes3c.sf2.zip": Looped stereo version. A mild stereo pitch shift doubling chorus effect was added, along with some compression. The effect was added using mid-side technique, so it cancels out completely when summed to mono.
