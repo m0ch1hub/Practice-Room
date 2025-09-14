@@ -266,9 +266,12 @@ class SoundEngine: ObservableObject {
     func playTimedSequence(_ events: [NoteEvent], tempo: Double = defaultTempo) {
         Logger.shared.audio("Playing timed sequence with \(events.count) events at \(tempo) BPM")
 
-        // Use legacy method for now to ensure currentlyPlayingNotes is updated
-        // AVSequencer doesn't update our playing notes tracking
-        playTimedSequenceLegacy(events, tempo: tempo)
+        // Use AVAudioSequencer for accurate playback
+        if #available(iOS 13.0, *) {
+            avSequencer?.playEvents(events, tempo: tempo)
+        } else {
+            Logger.shared.error("AVAudioSequencer requires iOS 13.0 or later")
+        }
     }
     
     /// Create MIDI file data from note events
@@ -380,29 +383,6 @@ class SoundEngine: ObservableObject {
         
         return bytes
     }
-    
-    /// Legacy timer-based playback (keeping for simple cases)
-    func playTimedSequenceLegacy(_ events: [NoteEvent], tempo: Double = defaultTempo) {
-        Logger.shared.audio("Playing timed sequence with \(events.count) events at \(tempo) BPM (legacy)")
-        
-        for event in events {
-            let startTime = ticksToSeconds(event.startTick, tempo: tempo)
-            let duration = ticksToSeconds(event.durationTicks, tempo: tempo)
-            
-            // Schedule note to start
-            DispatchQueue.main.asyncAfter(deadline: .now() + startTime) { [weak self] in
-                self?.sampler.startNote(UInt8(event.note), withVelocity: event.velocity, onChannel: 0)
-                self?.currentlyPlayingNotes.insert(event.note)
-
-                // Schedule note to stop
-                DispatchQueue.main.asyncAfter(deadline: .now() + duration) { [weak self] in
-                    self?.sampler.stopNote(UInt8(event.note), onChannel: 0)
-                    self?.currentlyPlayingNotes.remove(event.note)
-                }
-            }
-        }
-    }
-    
     /// Convenience method to play a simple chord
     func playChordAsSequence(midiNotes: [Int], durationTicks: Int = 480) {
         let events = midiNotes.map { note in

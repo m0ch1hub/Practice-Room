@@ -6,11 +6,14 @@ class AVSequencer {
     private let engine: AVAudioEngine
     private let sequencer: AVAudioSequencer
     private let sampler: AVAudioUnitSampler
-    
+    private var positionTimer: Timer?
+    private var currentEvents: [SoundEngine.NoteEvent] = []
+    private var currentTempo: Double = 120.0
+
     init(engine: AVAudioEngine, sampler: AVAudioUnitSampler) {
         self.engine = engine
         self.sampler = sampler
-        
+
         // Create sequencer attached to the engine
         self.sequencer = AVAudioSequencer(audioEngine: engine)
     }
@@ -18,29 +21,36 @@ class AVSequencer {
     func playEvents(_ events: [SoundEngine.NoteEvent], tempo: Double) {
         // Stop any existing playback
         stop()
-        
+
+        // Store events and tempo for position tracking
+        currentEvents = events
+        currentTempo = tempo
+
         // Create a temporary MIDI file from the events
         if let midiFileURL = createMIDIFile(from: events, tempo: tempo) {
             do {
                 // Load the MIDI file into the sequencer
                 try sequencer.load(from: midiFileURL, options: [])
-                
+
                 // Route all tracks to our sampler
                 for track in sequencer.tracks {
                     track.destinationAudioUnit = sampler
                 }
-                
+
                 // Set playback rate based on tempo
                 // Default MIDI tempo is 120 BPM, so adjust rate accordingly
                 sequencer.rate = Float(tempo / 120.0)
-                
+
                 // Prepare and start playback
                 sequencer.currentPositionInBeats = 0
                 sequencer.prepareToPlay()
-                
+
                 try sequencer.start()
                 Logger.shared.audio("AVSequencer started with \(events.count) events at \(tempo) BPM")
-                
+
+                // Start position tracking for keyboard visualization
+                startPositionTracking()
+
                 // Clean up temp file after a delay
                 DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) {
                     try? FileManager.default.removeItem(at: midiFileURL)
@@ -162,10 +172,59 @@ class AVSequencer {
     func stop() {
         sequencer.stop()
         sequencer.currentPositionInBeats = 0
-        
+
+        // Stop position tracking
+        stopPositionTracking()
+
         // Stop all notes on sampler
         for midi in 0...127 {
             sampler.stopNote(UInt8(midi), onChannel: 0)
+        }
+
+        // Clear playing notes
+        SoundEngine.shared.currentlyPlayingNotes.removeAll()
+    }
+
+    private func startPositionTracking() {
+        stopPositionTracking()
+
+        // Update keyboard 30 times per second for smooth visualization
+        positionTimer = Timer.scheduledTimer(withTimeInterval: 1.0/30.0, repeats: true) { [weak self] _ in
+            self?.updateCurrentlyPlayingNotes()
+        }
+    }
+
+    private func stopPositionTracking() {
+        positionTimer?.invalidate()
+        positionTimer = nil
+    }
+
+    private func updateCurrentlyPlayingNotes() {
+        guard sequencer.isPlaying else {
+            stopPositionTracking()
+            SoundEngine.shared.currentlyPlayingNotes.removeAll()
+            return
+        }
+
+        // Get current position in ticks
+        let currentBeats = sequencer.currentPositionInBeats
+        let ticksPerBeat = Double(SoundEngine.defaultTicksPerBeat)
+        let currentTick = Int(currentBeats * ticksPerBeat)
+
+        // Find which notes should be playing at this position
+        var activeNotes = Set<Int>()
+        for event in currentEvents {
+            let noteStart = event.startTick
+            let noteEnd = event.startTick + event.durationTicks
+
+            if currentTick >= noteStart && currentTick < noteEnd {
+                activeNotes.insert(event.note)
+            }
+        }
+
+        // Update the shared SoundEngine's playing notes on main thread
+        DispatchQueue.main.async {
+            SoundEngine.shared.currentlyPlayingNotes = activeNotes
         }
     }
     
