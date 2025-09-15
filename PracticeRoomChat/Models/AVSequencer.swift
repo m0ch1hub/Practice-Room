@@ -186,11 +186,6 @@ class AVSequencer {
 
         // Clear playing notes
         SoundEngine.shared.currentlyPlayingNotes.removeAll()
-
-        // Reset keyboard range to default C4-B4
-        DispatchQueue.main.async {
-            SoundEngine.shared.keyboardRange = (60, 71)
-        }
     }
 
     private func startPositionTracking() {
@@ -243,6 +238,7 @@ class AVSequencer {
         let notes = events.map { $0.note }
         var minNote = notes.min() ?? 60
         var maxNote = notes.max() ?? 71
+
 
         // Ensure minimum range of C4-B4 (60-71)
         // If the range is smaller than this, expand it
