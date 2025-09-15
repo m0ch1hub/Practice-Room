@@ -6,11 +6,16 @@ struct TrainingExample: Codable {
         let role: String
         let parts: [Part]
     }
-    
+
     struct Part: Codable {
         let text: String
     }
-    
+
+    struct Metadata: Codable {
+        let display: String? // "main" shows in menu, "variation" is hidden
+    }
+
+    let metadata: Metadata?
     let contents: [Content]
 }
 
@@ -81,11 +86,11 @@ class TrainingDataManager {
     /// Loads and parses training data into TrainingExample objects
     func loadTrainingExamples() -> [TrainingExample] {
         var examples: [TrainingExample] = []
-        
+
         do {
             let dataString = try loadTrainingDataString()
             let lines = dataString.components(separatedBy: .newlines)
-            
+
             for line in lines where !line.isEmpty {
                 if let jsonData = line.data(using: .utf8),
                    let example = try? JSONDecoder().decode(TrainingExample.self, from: jsonData) {
@@ -95,8 +100,17 @@ class TrainingDataManager {
         } catch {
             print("Error loading training examples: \(error)")
         }
-        
+
         return examples
+    }
+
+    /// Loads only main questions for display in menu (filters out variations)
+    func loadMainQuestions() -> [TrainingExample] {
+        return loadTrainingExamples().filter { example in
+            // If no metadata or display is "main", show in menu
+            // Backwards compatible: examples without metadata are considered "main"
+            example.metadata?.display == "main" || example.metadata == nil
+        }
     }
 }
 

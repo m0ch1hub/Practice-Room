@@ -121,7 +121,7 @@ struct ChatView: View {
                                 }
                             }
                         }
-                        
+
                         Section("🎵 Simple Playback") {
                             ForEach(simpleQuestions, id: \.self) { question in
                                 Button(action: {
@@ -188,19 +188,19 @@ struct ChatView: View {
     }
     
     private func loadAvailableQuestions() {
-        // Load questions from training data
-        let examples = TrainingDataManager.shared.loadTrainingExamples()
-        
-        // Get all user prompts
+        // Load only main questions for menu display (filters out variations)
+        let examples = TrainingDataManager.shared.loadMainQuestions()
+
+        // Get all user prompts from main questions only
         let allQuestions = examples.compactMap { example in
             example.contents.first(where: { $0.role == "user" })?.parts.first?.text
         }
-        
+
         // Separate into detailed (questions) and simple (commands)
         detailedQuestions = allQuestions.filter { question in
             question.lowercased().starts(with: "what")
         }
-        
+
         simpleQuestions = allQuestions.filter { question in
             question.lowercased().starts(with: "play")
         }
