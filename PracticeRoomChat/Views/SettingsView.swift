@@ -3,6 +3,7 @@ import SwiftUI
 struct SettingsView: View {
     @AppStorage("useLocalTrainingData") private var useLocalTrainingData = false
     @AppStorage("selectedSoundFont") private var selectedSoundFont = SoundEngine.SoundFont.yamaha.rawValue
+    @AppStorage("notationDisplay") private var notationDisplay = NotationDisplay.keyboard.rawValue
     @Environment(\.dismiss) private var dismiss
     @StateObject private var soundEngine = SoundEngine.shared
 
@@ -49,6 +50,20 @@ struct SettingsView: View {
                 }
 
                 Section {
+                    Picker("Display", selection: $notationDisplay) {
+                        ForEach(NotationDisplay.allCases, id: \.rawValue) { display in
+                            Text(display.displayName).tag(display.rawValue)
+                        }
+                    }
+                    .pickerStyle(.segmented)
+                } header: {
+                    Text("Notation Display")
+                } footer: {
+                    Text(getNotationDisplayDescription())
+                        .font(.caption)
+                }
+
+                Section {
                     HStack {
                         Text("Model Endpoint")
                         Spacer()
@@ -77,6 +92,32 @@ struct SettingsView: View {
                     }
                 }
             }
+        }
+    }
+
+    private func getNotationDisplayDescription() -> String {
+        switch NotationDisplay(rawValue: notationDisplay) ?? .keyboard {
+        case .keyboard:
+            return "Traditional piano keyboard view"
+        case .staff:
+            return "Musical staff notation with notes"
+        case .both:
+            return "Split view showing both keyboard and staff"
+        }
+    }
+}
+
+// MARK: - Notation Display Mode
+enum NotationDisplay: String, CaseIterable {
+    case keyboard = "keyboard"
+    case staff = "staff"
+    case both = "both"
+
+    var displayName: String {
+        switch self {
+        case .keyboard: return "Piano"
+        case .staff: return "Staff"
+        case .both: return "Both"
         }
     }
 }

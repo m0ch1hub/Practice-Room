@@ -8,7 +8,8 @@ struct ChatView: View {
     @State private var showingExamplesMenu = false
     @State private var detailedQuestions: [String] = []
     @State private var simpleQuestions: [String] = []
-    @State private var showingSettings = false
+    @AppStorage("notationDisplay") private var notationDisplay = NotationDisplay.keyboard.rawValue
+    // Removed showingQuestionMenu - using native menu instead
     // Removed showSlidesView state
     
     var body: some View {
@@ -55,33 +56,12 @@ struct ChatView: View {
             
             // Simple header with ultraThinMaterial
             VStack {
-                HStack {
-                    Button(action: {}) {
-                        Image(systemName: "line.horizontal.3")
-                            .font(.title2)
-                            .foregroundColor(.primary)
-                    }
-                    
-                    Spacer()
-                    
-                    Text("Practice Room Chat")
-                        .font(.system(size: 18, weight: .semibold))
-                        .foregroundColor(.primary)
-                    
-                    Spacer()
-                    
-                    // Settings button
-                    Button(action: {
-                        showingSettings = true
-                    }) {
-                        Image(systemName: "gearshape")
-                            .font(.title2)
-                            .foregroundColor(.primary)
-                    }
-                }
+                Text("Practice Room")
+                    .font(.system(size: 18, weight: .semibold))
+                    .foregroundColor(.primary)
                 .padding(.horizontal, 20)
                 .padding(.vertical, 12)
-                .background(.ultraThinMaterial)
+                .glassEffect(.regular, in: .rect(cornerRadius: 0))
                 
                 Spacer()
             }
@@ -89,79 +69,66 @@ struct ChatView: View {
             // Bottom section with keyboard and input
             VStack(spacing: 0) {
                 Spacer()
-                
-                // Piano keyboard - always visible with dynamic range
-                MidiKeyboardView(
-                    midiNotes: Array(soundEngine.currentlyPlayingNotes),
-                    showLabels: true,
-                    minNote: soundEngine.keyboardRange.minNote,
-                    maxNote: soundEngine.keyboardRange.maxNote
-                )
-                .frame(height: 180)
-                .frame(maxWidth: 300) // Limit width to make it more compact
+
+                // Notation display - switch between keyboard, staff, or both
+                Group {
+                    switch NotationDisplay(rawValue: notationDisplay) ?? .keyboard {
+                    case .keyboard:
+                        MidiKeyboardView(
+                            midiNotes: Array(soundEngine.currentlyPlayingNotes),
+                            showLabels: true,
+                            minNote: soundEngine.keyboardRange.minNote,
+                            maxNote: soundEngine.keyboardRange.maxNote
+                        )
+                        .frame(height: 180)
+                        .frame(maxWidth: 300) // Limit width to make it more compact
+
+                    case .staff:
+                        StaffNotationView(
+                            midiNotes: Array(soundEngine.currentlyPlayingNotes),
+                            showLabels: true,
+                            minNote: soundEngine.keyboardRange.minNote,
+                            maxNote: soundEngine.keyboardRange.maxNote
+                        )
+                        .frame(height: 180)
+                        .frame(maxWidth: .infinity)
+
+                    case .both:
+                        VStack(spacing: 8) {
+                            StaffNotationView(
+                                midiNotes: Array(soundEngine.currentlyPlayingNotes),
+                                showLabels: false,
+                                minNote: soundEngine.keyboardRange.minNote,
+                                maxNote: soundEngine.keyboardRange.maxNote
+                            )
+                            .frame(height: 85)
+                            .frame(maxWidth: .infinity)
+
+                            MidiKeyboardView(
+                                midiNotes: Array(soundEngine.currentlyPlayingNotes),
+                                showLabels: true,
+                                minNote: soundEngine.keyboardRange.minNote,
+                                maxNote: soundEngine.keyboardRange.maxNote
+                            )
+                            .frame(height: 85)
+                            .frame(maxWidth: 300)
+                        }
+                    }
+                }
                 .padding(.horizontal, 20)
                 .padding(.bottom, 8)
-                
-                if chatService.messages.isEmpty {
-                    SuggestionChips()
-                        .environmentObject(chatService)
-                        .padding(.bottom, 8)
-                }
-                
-                // Simple bottom bar with ultraThinMaterial
-                HStack(spacing: 12) {
-                    Menu {
-                        Section("📚 Detailed Explanations") {
-                            ForEach(detailedQuestions, id: \.self) { question in
-                                Button(action: {
-                                    messageText = question
-                                    sendMessage()
-                                }) {
-                                    Text(question)
-                                }
-                            }
-                        }
 
-                        Section("🎵 Simple Playback") {
-                            ForEach(simpleQuestions, id: \.self) { question in
-                                Button(action: {
-                                    messageText = question
-                                    sendMessage()
-                                }) {
-                                    Text(question)
-                                }
-                            }
-                        }
-                    } label: {
-                        Image(systemName: "book.circle")
-                            .font(.system(size: 24))
-                            .foregroundColor(.primary)
-                    }
-                    
-                    HStack(spacing: 8) {
-                        TextField("Message", text: $messageText)
-                            .focused($isTextFieldFocused)
-                            .onSubmit {
-                                sendMessage()
-                            }
-                        
-                        if !messageText.isEmpty {
-                            Button(action: sendMessage) {
-                                Image(systemName: "arrow.up.circle.fill")
-                                    .font(.system(size: 28))
-                                    .foregroundColor(.blue)
-                            }
-                            .disabled(chatService.isLoading)
-                        }
-                    }
-                    .padding(.horizontal, 12)
-                    .padding(.vertical, 8)
-                    .background(Color(.systemGray6))
-                    .clipShape(Capsule())
-                }
-                .padding(.horizontal)
-                .padding(.vertical, 8)
-                .background(.ultraThinMaterial)
+
+                // iOS 26 Liquid Glass Control Bar
+                // iOS 26 Liquid Glass Control Bar with integrated menu
+                LiquidGlassControlBarWithMenu(
+                    messageText: $messageText,
+                    isTextFieldFocused: $isTextFieldFocused,
+                    onSend: sendMessage,
+                    detailedQuestions: detailedQuestions,
+                    simpleQuestions: simpleQuestions
+                )
+                .padding(.bottom, 8)
             }
         }
         .background(Color(.systemBackground))
@@ -181,9 +148,7 @@ struct ChatView: View {
         .onAppear {
             loadAvailableQuestions()
         }
-        .sheet(isPresented: $showingSettings) {
-            SettingsView()
-        }
+        // Removed sheet - using native menu instead
         // Removed fullScreenCover for slides
     }
     
@@ -246,33 +211,6 @@ struct ChatMessageView: View {
 
 // Removed PlayButton - audio is now handled inline
 
-struct SuggestionChips: View {
-    let suggestions = [
-        "What is a major chord?",
-        "Show me the C major scale"
-    ]
-    @EnvironmentObject var chatService: ChatService
-    
-    var body: some View {
-        HStack(spacing: 12) {
-            ForEach(suggestions, id: \.self) { suggestion in
-                Button(action: {
-                    chatService.sendMessage(suggestion)
-                }) {
-                    Text(suggestion)
-                        .font(.system(size: 16, weight: .medium))
-                        .foregroundColor(.primary)
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                        .padding(16)
-                        .background(Color(.systemGray6))
-                        .cornerRadius(12)
-                }
-                .buttonStyle(PlainButtonStyle())
-            }
-        }
-        .padding(.horizontal, 20)
-    }
-}
 
 struct LoadingIndicator: View {
     var body: some View {
@@ -308,6 +246,107 @@ struct WelcomeView: View {
                 .foregroundColor(.blue)
         }
         .padding(.top, 60)
+    }
+}
+
+// iOS 26 Liquid Glass Control Bar with integrated native menu
+struct LiquidGlassControlBarWithMenu: View {
+    @Binding var messageText: String
+    @FocusState.Binding var isTextFieldFocused: Bool
+    let onSend: () -> Void
+    let detailedQuestions: [String]
+    let simpleQuestions: [String]
+
+    @Namespace private var glassNamespace
+    @State private var isMenuPressed = false
+
+    var body: some View {
+        GlassEffectContainer(spacing: 16.0) {
+            HStack(alignment: .bottom, spacing: 16) {
+                // Native iOS 26 Menu with glass effect
+                Menu {
+                    if !detailedQuestions.isEmpty {
+                        Section("Questions") {
+                            ForEach(detailedQuestions, id: \.self) { question in
+                                Button(action: {
+                                    messageText = question
+                                    onSend()
+                                }) {
+                                    Label(question, systemImage: "questionmark.circle")
+                                }
+                            }
+                        }
+                    }
+
+                    if !simpleQuestions.isEmpty {
+                        Section("Commands") {
+                            ForEach(simpleQuestions, id: \.self) { question in
+                                Button(action: {
+                                    messageText = question
+                                    onSend()
+                                }) {
+                                    Label(question, systemImage: "play.circle")
+                                }
+                            }
+                        }
+                    }
+                } label: {
+                    Image(systemName: "plus.circle.fill")
+                        .font(.system(size: 28, weight: .medium))
+                        .foregroundStyle(.white)
+                        .frame(width: 56, height: 56)
+                        .scaleEffect(isMenuPressed ? 0.95 : 1.0)
+                }
+                .buttonStyle(.glass)
+                .glassEffectID("menuButton", in: glassNamespace)
+                .onLongPressGesture(
+                    minimumDuration: 0,
+                    maximumDistance: .infinity,
+                    pressing: { pressing in
+                        withAnimation(.spring(response: 0.3, dampingFraction: 0.6)) {
+                            isMenuPressed = pressing
+                        }
+                    },
+                    perform: { }
+                )
+
+                // Glass input field
+                HStack(spacing: 8) {
+                    TextField("Message", text: $messageText, axis: .vertical)
+                        .textFieldStyle(.plain)
+                        .font(.system(size: 17, weight: .regular))
+                        .foregroundStyle(.primary)
+                        .focused($isTextFieldFocused)
+                        .lineLimit(1...6)
+                        .padding(.vertical, 12)
+                        .padding(.leading, 16)
+                        .onSubmit {
+                            if !messageText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                                onSend()
+                            }
+                        }
+
+                    Button(action: {
+                        if !messageText.isEmpty {
+                            onSend()
+                        }
+                    }) {
+                        Image(systemName: "arrow.up.circle.fill")
+                            .font(.system(size: 24))
+                            .foregroundColor(messageText.isEmpty ? .secondary : .blue)
+                    }
+                    .padding(.trailing, 12)
+                }
+                .glassEffect(
+                    .regular
+                        .tint(isTextFieldFocused ? .blue.opacity(0.1) : .clear)
+                        .interactive(true),
+                    in: .capsule
+                )
+                .glassEffectID("inputField", in: glassNamespace)
+            }
+        }
+        .padding(.horizontal, 16)
     }
 }
 
