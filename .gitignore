@@ -104,3 +104,10 @@ node_modules/
 
 # macOS
 .DS_Store
+
+# Soundfonts (too large for GitHub)
+*.sf2
+*.sf2.zip
+*.sf3
+PracticeRoomChat/Yamaha_C7__Normalized_.sf2
+PracticeRoomChat/jRhodes3.sf2
