@@ -1,44 +1,65 @@
-# Practice Room Chat
+# Practice Room
 
-An iOS music theory tutoring chat application powered by a fine-tuned Google Vertex AI Gemini model with real-time audio playback.
+An interactive music theory education app for iOS that helps users learn musical concepts through audio examples and visual notation.
 
 ## Features
 
-- **Fine-tuned AI Model**: Custom-trained Gemini model specialized for music theory education
-- **Real-time Audio Playback**: Instant MIDI-based sound generation for musical examples
-- **Swift/SwiftUI Interface**: Native iOS experience with clean, responsive design
-- **Structured Response Parsing**: Smart extraction of musical examples from AI responses
+- 🎹 **Interactive Piano Keyboard** - Visual representation of notes being played
+- 🎼 **Music Theory Lessons** - Learn about intervals, chords, scales, and modes
+- 🔊 **Audio Playback** - Hear musical examples with high-quality sound synthesis
+- 📚 **Comprehensive Coverage** - From basic intervals to complex harmonic concepts
+- 🎯 **Instant Examples** - Every concept demonstrated with playable MIDI examples
 
-## Technical Architecture
+## Topics Covered
 
-### AI Service (`ChatService.swift`)
-- Google Vertex AI integration with OAuth authentication
-- Fine-tuned Gemini model endpoint: `gold-major-checkpoint-10-6306300618155753472`
-- Structured response parsing for text and audio examples
-- Error handling with user-friendly fallbacks
+- Musical intervals (minor 2nds through major 7ths)
+- Chord types (major, minor, diminished, augmented, seventh chords)
+- Scales (major, minor, chromatic, whole tone)
+- Modes (Ionian, Dorian, Phrygian, etc.)
+- Advanced concepts (voice leading, parallel motion, quartal harmony)
 
-### Audio Engine (`SoundEngine.swift`)
-- AVAudioEngine-based MIDI playback
-- Support for notes, intervals, chords, scales, and progressions
-- Real-time synthesis without external sample libraries
+## Technology
 
-### Models
-- `ChatMessage`: Message container with embedded musical examples
-- `MusicalExample`: Typed audio examples (note, chord, scale, etc.)
-- `ServiceAccountAuth`: Simplified OAuth token management
+Built with:
+- SwiftUI for modern iOS interface
+- AVFoundation for audio synthesis
+- Local JSONL training data for instant responses
+- Firebase for app configuration
+
+## Privacy
+
+Practice Room respects your privacy:
+- **No data collection** - We don't collect any user information
+- **No tracking** - No analytics or usage tracking
+- **Works offline** - All content stored locally on device
+- **No account required** - Start learning immediately
+
+See our [Privacy Policy](PRIVACY_POLICY.md) for details.
+
+## Requirements
+
+- iOS 17.0+
+- iPhone or iPad
+- ~50MB storage space
+
+## Installation
+
+Available on the App Store (coming soon).
 
 ## Getting Started
 
 1. Open `PracticeRoomChat.xcodeproj` in Xcode
 2. Build and run the project
-3. Start chatting about music theory topics
+3. Start exploring music theory concepts
 
-## Usage Examples
+## Support
 
-Ask questions like:
-- "What is a C major chord?"
-- "Explain the circle of fifths"
-- "How do you build a minor scale?"
-- "What's a dominant seventh chord?"
+For questions or issues, please open an issue in this repository.
 
-The AI will respond with explanations and playable audio examples.
+## License
+
+Copyright © 2025. All rights reserved.
+
+## Acknowledgments
+
+Built with educational intent to make music theory accessible to everyone.
