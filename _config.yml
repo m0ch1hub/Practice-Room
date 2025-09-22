@@ -1,0 +1,26 @@
+# GitHub Pages Configuration
+title: Practice Room
+description: Interactive Music Theory Education for iOS
+theme: jekyll-theme-minimal
+
+# Exclude iOS project files from the website
+exclude:
+  - PracticeRoomChat/
+  - PracticeRoomChat.xcodeproj/
+  - "*.swift"
+  - "*.xcconfig"
+  - Podfile
+  - Podfile.lock
+  - firebase-backend/
+  - backend/
+  - "Midi Data/"
+  - "*.mid"
+  - ModernChatView.swift
+  - ModernLiquidGlassControlBar.swift
+  - VERTEX_AI_TUNING_GUIDE.md
+  - APP_STORE_PRIVACY.md
+  - PRIVACY_POLICY.md
+  - .claude/
+  - node_modules/
+  - package.json
+  - package-lock.json
