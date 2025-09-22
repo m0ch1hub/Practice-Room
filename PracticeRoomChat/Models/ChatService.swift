@@ -73,14 +73,9 @@ class ChatService: ObservableObject {
         }
     }
     
-    private let googleCloudApiKey: String = {
-        guard let path = Bundle.main.path(forResource: "Config", ofType: "xcconfig"),
-              let config = NSDictionary(contentsOfFile: path),
-              let apiKey = config["GOOGLE_CLOUD_API_KEY"] as? String else {
-            return "YOUR_GOOGLE_CLOUD_API_KEY"
-        }
-        return apiKey
-    }()
+    // Google Cloud API key should be loaded from secure configuration
+    // This is only used for direct Vertex AI calls which are currently disabled
+    private let googleCloudApiKey: String = ""
     
     private let projectId = "1078751798332"
     private let location = "us-central1"

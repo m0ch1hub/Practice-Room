@@ -3,15 +3,12 @@ import SwiftUI
 struct ChatView: View {
     @StateObject private var chatService = ChatService(authService: ServiceAccountAuth())
     @StateObject private var soundEngine = SoundEngine.shared
-    @State private var messageText = ""
-    @FocusState private var isTextFieldFocused: Bool
+    @State private var selectedQuestion = "What is a major chord?"
     @State private var showingExamplesMenu = false
     @State private var detailedQuestions: [String] = []
     @State private var simpleQuestions: [String] = []
-    @State private var multiTurnQuestions: [(display: String, questions: [String])] = []
+    @State private var hasAnsweredCurrentQuestion = false
     @AppStorage("notationDisplay") private var notationDisplay = NotationDisplay.keyboard.rawValue
-    // Removed showingQuestionMenu - using native menu instead
-    // Removed showSlidesView state
     
     var body: some View {
         ZStack {
@@ -23,8 +20,13 @@ struct ChatView: View {
                         Color.clear.frame(height: 80)
                         
                         if chatService.messages.isEmpty {
-                            WelcomeView()
-                                .padding(.top, 40)
+                            // Show the selected question
+                            Text(selectedQuestion)
+                                .font(.system(size: 20, weight: .semibold))
+                                .foregroundColor(.primary)
+                                .padding(.top, 60)
+                                .padding(.horizontal, 20)
+                                .multilineTextAlignment(.center)
                         }
                         
                         ForEach(chatService.messages) { message in
@@ -120,34 +122,24 @@ struct ChatView: View {
                 .padding(.bottom, 8)
 
 
-                // iOS 26 Liquid Glass Control Bar
-                // iOS 26 Liquid Glass Control Bar with integrated menu
-                LiquidGlassControlBarWithMenu(
-                    messageText: $messageText,
-                    isTextFieldFocused: $isTextFieldFocused,
-                    onSend: sendMessage,
+                // Simplified control bar with preset questions
+                PresetQuestionControlBar(
+                    selectedQuestion: $selectedQuestion,
+                    hasAnsweredCurrentQuestion: $hasAnsweredCurrentQuestion,
+                    onSend: sendSelectedQuestion,
                     detailedQuestions: detailedQuestions,
                     simpleQuestions: simpleQuestions,
-                    multiTurnQuestions: multiTurnQuestions,
-                    onMultiTurnSelected: sendMultiTurnQuestions
+                    onQuestionSelected: { question in
+                        selectedQuestion = question
+                        hasAnsweredCurrentQuestion = false
+                        // Clear messages when switching questions
+                        chatService.messages.removeAll()
+                    }
                 )
                 .padding(.bottom, 8)
             }
         }
         .background(Color(.systemBackground))
-        .onTapGesture {
-            // Dismiss keyboard when tapping outside
-            isTextFieldFocused = false
-        }
-        .gesture(
-            DragGesture()
-                .onEnded { value in
-                    // Dismiss keyboard on swipe down
-                    if value.translation.height > 50 {
-                        isTextFieldFocused = false
-                    }
-                }
-        )
         .onAppear {
             loadAvailableQuestions()
         }
@@ -173,29 +165,15 @@ struct ChatView: View {
             question.lowercased().starts(with: "play")
         }
 
-        // Load multi-turn questions from JSONL (only the follow-up will be sent)
-        multiTurnQuestions = [
-            (display: "Major chord → Minor differences",
-             questions: ["What makes it minor?"])
-        ]
     }
     
-    private func sendMessage() {
-        guard !messageText.isEmpty else { return }
-        let message = messageText
-        Logger.shared.ui("Sending message from ChatView: '\(message)'")
-        messageText = ""
-        isTextFieldFocused = false // Dismiss keyboard
-        chatService.sendMessage(message)
+    private func sendSelectedQuestion() {
+        guard !hasAnsweredCurrentQuestion else { return }
+        Logger.shared.ui("Sending selected question: '\(selectedQuestion)'")
+        hasAnsweredCurrentQuestion = true
+        chatService.sendMessage(selectedQuestion)
     }
 
-    private func sendMultiTurnQuestions(_ questions: [String]) {
-        // For multi-turn, we only send the follow-up question
-        guard let followUp = questions.first else { return }
-
-        Logger.shared.ui("Sending follow-up question: '\(followUp)'")
-        chatService.sendMessage(followUp)
-    }
 
     // Removed playExample function - audio is now handled by ProgressiveResponseView
 }
@@ -266,37 +244,98 @@ struct WelcomeView: View {
     }
 }
 
-// Question selector sheet to replace broken Menu
-struct QuestionSelectorSheet: View {
+
+// Simplified control bar for preset questions only
+struct PresetQuestionControlBar: View {
+    @Binding var selectedQuestion: String
+    @Binding var hasAnsweredCurrentQuestion: Bool
+    let onSend: () -> Void
     let detailedQuestions: [String]
     let simpleQuestions: [String]
-    let multiTurnQuestions: [(display: String, questions: [String])]
     let onQuestionSelected: (String) -> Void
-    let onMultiTurnSelected: ([String]) -> Void
+
+    @State private var isMenuPressed = false
+    @State private var showQuestionSheet = false
+
+    var body: some View {
+        HStack(alignment: .bottom, spacing: 16) {
+            // Menu button
+            Button(action: {
+                showQuestionSheet = true
+            }) {
+                ZStack {
+                    Circle()
+                        .fill(.regularMaterial)
+                        .frame(width: 56, height: 56)
+
+                    Image(systemName: "plus.circle.fill")
+                        .font(.system(size: 28, weight: .medium))
+                        .foregroundStyle(.primary)
+                        .scaleEffect(isMenuPressed ? 0.95 : 1.0)
+                }
+            }
+            .onLongPressGesture(
+                minimumDuration: 0,
+                maximumDistance: .infinity,
+                pressing: { pressing in
+                    withAnimation(.spring(response: 0.3, dampingFraction: 0.6)) {
+                        isMenuPressed = pressing
+                    }
+                },
+                perform: { }
+            )
+            .sheet(isPresented: $showQuestionSheet) {
+                PresetQuestionSelectorSheet(
+                    detailedQuestions: detailedQuestions,
+                    simpleQuestions: simpleQuestions,
+                    onQuestionSelected: onQuestionSelected,
+                    isPresented: $showQuestionSheet
+                )
+                .presentationDetents([.medium, .large])
+            }
+
+            // Display selected question (read-only)
+            HStack(spacing: 8) {
+                Text(selectedQuestion)
+                    .font(.system(size: 17, weight: .regular))
+                    .foregroundStyle(.primary)
+                    .lineLimit(2)
+                    .padding(.vertical, 12)
+                    .padding(.leading, 16)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+
+                // Submit button
+                Button(action: {
+                    if !hasAnsweredCurrentQuestion {
+                        onSend()
+                    }
+                }) {
+                    Image(systemName: "arrow.up.circle.fill")
+                        .font(.system(size: 24))
+                        .foregroundColor(hasAnsweredCurrentQuestion ? .secondary : .blue)
+                }
+                .disabled(hasAnsweredCurrentQuestion)
+                .padding(.trailing, 12)
+            }
+            .glassEffect(
+                .regular,
+                in: .capsule
+            )
+        }
+        .padding(.horizontal, 16)
+    }
+}
+
+// New sheet for preset question selection
+struct PresetQuestionSelectorSheet: View {
+    let detailedQuestions: [String]
+    let simpleQuestions: [String]
+    let onQuestionSelected: (String) -> Void
     @Binding var isPresented: Bool
 
     var body: some View {
         NavigationView {
             List {
-                if !multiTurnQuestions.isEmpty {
-                    Section("Conversations") {
-                        ForEach(multiTurnQuestions, id: \.display) { item in
-                            Button(action: {
-                                onMultiTurnSelected(item.questions)
-                                isPresented = false
-                            }) {
-                                HStack {
-                                    Image(systemName: "bubble.left.and.bubble.right")
-                                        .foregroundColor(.purple)
-                                    Text(item.display)
-                                        .foregroundColor(.primary)
-                                    Spacer()
-                                }
-                            }
-                        }
-                    }
-                }
-
                 if !detailedQuestions.isEmpty {
                     Section("Questions") {
                         ForEach(detailedQuestions, id: \.self) { question in
@@ -345,99 +384,6 @@ struct QuestionSelectorSheet: View {
                 }
             }
         }
-    }
-}
-
-// iOS 26 Liquid Glass Control Bar with sheet-based selector
-struct LiquidGlassControlBarWithMenu: View {
-    @Binding var messageText: String
-    @FocusState.Binding var isTextFieldFocused: Bool
-    let onSend: () -> Void
-    let detailedQuestions: [String]
-    let simpleQuestions: [String]
-    let multiTurnQuestions: [(display: String, questions: [String])]
-    let onMultiTurnSelected: ([String]) -> Void
-
-    @State private var isMenuPressed = false
-    @State private var showQuestionSheet = false
-
-    var body: some View {
-        HStack(alignment: .bottom, spacing: 16) {
-            // Button that presents sheet instead of Menu
-            Button(action: {
-                showQuestionSheet = true
-            }) {
-                ZStack {
-                    Circle()
-                        .fill(.regularMaterial)
-                        .frame(width: 56, height: 56)
-
-                    Image(systemName: "plus.circle.fill")
-                        .font(.system(size: 28, weight: .medium))
-                        .foregroundStyle(.primary)
-                        .scaleEffect(isMenuPressed ? 0.95 : 1.0)
-                }
-            }
-            .onLongPressGesture(
-                minimumDuration: 0,
-                maximumDistance: .infinity,
-                pressing: { pressing in
-                    withAnimation(.spring(response: 0.3, dampingFraction: 0.6)) {
-                        isMenuPressed = pressing
-                    }
-                },
-                perform: { }
-            )
-            .sheet(isPresented: $showQuestionSheet) {
-                QuestionSelectorSheet(
-                    detailedQuestions: detailedQuestions,
-                    simpleQuestions: simpleQuestions,
-                    multiTurnQuestions: multiTurnQuestions,
-                    onQuestionSelected: { question in
-                        messageText = question
-                        onSend()
-                    },
-                    onMultiTurnSelected: onMultiTurnSelected,
-                    isPresented: $showQuestionSheet
-                )
-                .presentationDetents([.medium, .large])
-            }
-
-            // Glass input field - apply effect directly
-            HStack(spacing: 8) {
-                TextField("Message", text: $messageText, axis: .vertical)
-                    .textFieldStyle(.plain)
-                    .font(.system(size: 17, weight: .regular))
-                    .foregroundStyle(.primary)
-                    .focused($isTextFieldFocused)
-                    .lineLimit(1...6)
-                    .padding(.vertical, 12)
-                    .padding(.leading, 16)
-                    .onSubmit {
-                        if !messageText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-                            onSend()
-                        }
-                    }
-
-                Button(action: {
-                    if !messageText.isEmpty {
-                        onSend()
-                    }
-                }) {
-                    Image(systemName: "arrow.up.circle.fill")
-                        .font(.system(size: 24))
-                        .foregroundColor(messageText.isEmpty ? .secondary : .blue)
-                }
-                .padding(.trailing, 12)
-            }
-            .glassEffect(
-                .regular
-                    .tint(isTextFieldFocused ? .blue.opacity(0.1) : .clear)
-                    .interactive(true),
-                in: .capsule
-            )
-        }
-        .padding(.horizontal, 16)
     }
 }
 
