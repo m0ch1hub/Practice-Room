@@ -3,8 +3,10 @@ import SwiftUI
 struct ChatView: View {
     @StateObject private var chatService = ChatService(authService: ServiceAccountAuth())
     @StateObject private var soundEngine = SoundEngine.shared
+    @StateObject private var feedbackManager = FeedbackManager.shared
     @State private var selectedQuestion = "What is a major chord?"
     @State private var showingExamplesMenu = false
+    @State private var showingSettings = false
     @State private var detailedQuestions: [String] = []
     @State private var simpleQuestions: [String] = []
     @State private var hasAnsweredCurrentQuestion = false
@@ -57,15 +59,27 @@ struct ChatView: View {
             }
             .ignoresSafeArea()
             
-            // Simple header with ultraThinMaterial
+            // Simple header with ultraThinMaterial and settings
             VStack {
-                Text("Practice Room")
-                    .font(.system(size: 18, weight: .semibold))
-                    .foregroundColor(.primary)
+                HStack {
+                    Text("Practice Room")
+                        .font(.system(size: 18, weight: .semibold))
+                        .foregroundColor(.primary)
+
+                    Spacer()
+
+                    Button(action: {
+                        showingSettings = true
+                    }) {
+                        Image(systemName: "gearshape.fill")
+                            .font(.system(size: 16))
+                            .foregroundColor(.secondary)
+                    }
+                }
                 .padding(.horizontal, 20)
                 .padding(.vertical, 12)
                 .glassEffect(.regular, in: .rect(cornerRadius: 0))
-                
+
                 Spacer()
             }
             
@@ -143,7 +157,9 @@ struct ChatView: View {
         .onAppear {
             loadAvailableQuestions()
         }
-        // Removed sheet - using native menu instead
+        .sheet(isPresented: $showingSettings) {
+            FeedbackSettingsView()
+        }
         // Removed fullScreenCover for slides
     }
     
@@ -181,6 +197,10 @@ struct ChatView: View {
 struct ChatMessageView: View {
     let message: ChatMessage
     let scrollProxy: ScrollViewProxy
+    @StateObject private var feedbackManager = FeedbackManager.shared
+    @State private var userQuestion = ""
+    @State private var showingFeedbackSheet = false
+    @State private var pendingFeedback: (messageId: UUID, question: String, answer: String, rating: FeedbackItem.Rating)?
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
@@ -191,16 +211,69 @@ struct ChatMessageView: View {
                     .foregroundColor(.primary)
                     .padding(.vertical, 8)
                     .frame(maxWidth: .infinity, alignment: .leading)
+                    .onAppear {
+                        userQuestion = message.content
+                    }
             } else {
                 // Assistant response with progressive reveal
-                ProgressiveResponseView(
-                    response: ProgressiveResponse.parse(message.content),
-                    scrollProxy: scrollProxy,
-                    messageId: message.id
-                )
+                VStack(alignment: .leading, spacing: 12) {
+                    ProgressiveResponseView(
+                        response: ProgressiveResponse.parse(message.content),
+                        scrollProxy: scrollProxy,
+                        messageId: message.id
+                    )
+
+                    // Feedback buttons
+                    HStack(spacing: 20) {
+                        Button(action: {
+                            showFeedbackSubmission(
+                                messageId: message.id,
+                                question: userQuestion,
+                                answer: message.content,
+                                rating: .thumbsUp
+                            )
+                        }) {
+                            Image(systemName: feedbackManager.getRating(for: message.id) == .thumbsUp ? "hand.thumbsup.fill" : "hand.thumbsup")
+                                .font(.system(size: 16))
+                                .foregroundColor(feedbackManager.getRating(for: message.id) == .thumbsUp ? .green : .secondary)
+                        }
+                        .buttonStyle(.plain)
+
+                        Button(action: {
+                            showFeedbackSubmission(
+                                messageId: message.id,
+                                question: userQuestion,
+                                answer: message.content,
+                                rating: .thumbsDown
+                            )
+                        }) {
+                            Image(systemName: feedbackManager.getRating(for: message.id) == .thumbsDown ? "hand.thumbsdown.fill" : "hand.thumbsdown")
+                                .font(.system(size: 16))
+                                .foregroundColor(feedbackManager.getRating(for: message.id) == .thumbsDown ? .red : .secondary)
+                        }
+                        .buttonStyle(.plain)
+                    }
+                    .padding(.top, 4)
+                }
                 .padding(.vertical, 8)
             }
         }
+        .sheet(isPresented: $showingFeedbackSheet) {
+            if let feedback = pendingFeedback {
+                FeedbackSubmissionView(
+                    messageId: feedback.messageId,
+                    question: feedback.question,
+                    answer: feedback.answer,
+                    initialRating: feedback.rating,
+                    isPresented: $showingFeedbackSheet
+                )
+            }
+        }
+    }
+
+    private func showFeedbackSubmission(messageId: UUID, question: String, answer: String, rating: FeedbackItem.Rating) {
+        pendingFeedback = (messageId, question, answer, rating)
+        showingFeedbackSheet = true
     }
 }
 
