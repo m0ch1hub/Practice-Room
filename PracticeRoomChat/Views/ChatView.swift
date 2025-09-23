@@ -146,8 +146,8 @@ struct ChatView: View {
                     onQuestionSelected: { question in
                         selectedQuestion = question
                         hasAnsweredCurrentQuestion = false
-                        // Clear messages when switching questions
-                        chatService.messages.removeAll()
+                        // Send the selected preset question
+                        sendSelectedQuestion()
                     }
                 )
                 .padding(.bottom, 8)
@@ -184,8 +184,8 @@ struct ChatView: View {
     }
     
     private func sendSelectedQuestion() {
-        guard !hasAnsweredCurrentQuestion else { return }
-        Logger.shared.ui("Sending selected question: '\(selectedQuestion)'")
+        guard !selectedQuestion.isEmpty else { return }
+        Logger.shared.ui("Sending question: '\(selectedQuestion)'")
         hasAnsweredCurrentQuestion = true
         chatService.sendMessage(selectedQuestion)
     }
@@ -318,7 +318,7 @@ struct WelcomeView: View {
 }
 
 
-// Simplified control bar for preset questions only
+// Control bar with text input and preset questions
 struct PresetQuestionControlBar: View {
     @Binding var selectedQuestion: String
     @Binding var hasAnsweredCurrentQuestion: Bool
@@ -329,6 +329,8 @@ struct PresetQuestionControlBar: View {
 
     @State private var isMenuPressed = false
     @State private var showQuestionSheet = false
+    @State private var userInput = ""
+    @FocusState private var isTextFieldFocused: Bool
 
     var body: some View {
         HStack(alignment: .bottom, spacing: 16) {
@@ -367,27 +369,26 @@ struct PresetQuestionControlBar: View {
                 .presentationDetents([.medium, .large])
             }
 
-            // Display selected question (read-only)
+            // Text input field
             HStack(spacing: 8) {
-                Text(selectedQuestion)
+                TextField("Ask a question...", text: $userInput)
                     .font(.system(size: 17, weight: .regular))
                     .foregroundStyle(.primary)
-                    .lineLimit(2)
                     .padding(.vertical, 12)
                     .padding(.leading, 16)
                     .frame(maxWidth: .infinity, alignment: .leading)
+                    .focused($isTextFieldFocused)
+                    .onSubmit {
+                        sendMessage()
+                    }
 
                 // Submit button
-                Button(action: {
-                    if !hasAnsweredCurrentQuestion {
-                        onSend()
-                    }
-                }) {
+                Button(action: sendMessage) {
                     Image(systemName: "arrow.up.circle.fill")
                         .font(.system(size: 24))
-                        .foregroundColor(hasAnsweredCurrentQuestion ? .secondary : .blue)
+                        .foregroundColor(userInput.isEmpty ? .secondary : .blue)
                 }
-                .disabled(hasAnsweredCurrentQuestion)
+                .disabled(userInput.isEmpty)
                 .padding(.trailing, 12)
             }
             .glassEffect(
@@ -396,6 +397,13 @@ struct PresetQuestionControlBar: View {
             )
         }
         .padding(.horizontal, 16)
+    }
+
+    private func sendMessage() {
+        guard !userInput.isEmpty else { return }
+        selectedQuestion = userInput
+        onSend()
+        userInput = ""
     }
 }
 

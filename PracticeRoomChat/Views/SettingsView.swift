@@ -2,7 +2,7 @@ import SwiftUI
 
 struct SettingsView: View {
     @AppStorage("useLocalTrainingData") private var useLocalTrainingData = false
-    @AppStorage("selectedSoundFont") private var selectedSoundFont = SoundEngine.SoundFont.yamaha.rawValue
+    @AppStorage("selectedSoundFont") private var selectedSoundFont = SoundEngine.SoundFont.rhodes.rawValue
     @AppStorage("notationDisplay") private var notationDisplay = NotationDisplay.keyboard.rawValue
     @Environment(\.dismiss) private var dismiss
     @StateObject private var soundEngine = SoundEngine.shared
@@ -43,9 +43,7 @@ struct SettingsView: View {
                 } header: {
                     Text("Audio")
                 } footer: {
-                    Text(selectedSoundFont == SoundEngine.SoundFont.yamaha.rawValue ?
-                         "Classic grand piano sound" :
-                         "Vintage electric piano sound")
+                    Text("Vintage electric piano sound")
                         .font(.caption)
                 }
 

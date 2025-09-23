@@ -51,9 +51,10 @@ class ChatService: ObservableObject {
     @Published var messages: [ChatMessage] = []
     @Published var isLoading = false
     @Published var selectedModel: AIModel = .tunedModel
-    
+
     private let authService: ServiceAccountAuth
     private lazy var functions = Functions.functions()
+    private let geminiService = GeminiService()
     
     init(authService: ServiceAccountAuth) {
         self.authService = authService
@@ -91,15 +92,8 @@ class ChatService: ObservableObject {
         
         Task {
             do {
-                // Check if we should use local training data
-                let useLocalData = UserDefaults.standard.bool(forKey: "useLocalTrainingData")
-                let response: ChatMessage
-                
-                if useLocalData {
-                    response = try await getResponseFromTrainingData(message: message)
-                } else {
-                    response = try await callVertexAI(message: message)
-                }
+                // Use Gemini API for all responses
+                let response = try await callGeminiAPI(message: message)
                 
                 await MainActor.run {
                     self.messages.append(response)
@@ -110,7 +104,7 @@ class ChatService: ObservableObject {
                 await MainActor.run {
                     let errorMessage = ChatMessage(
                         role: "assistant",
-                        content: "Sorry, I encountered an error: \(error.localizedDescription)\n\nPlease make sure you're authenticated with Google Cloud by running 'gcloud auth login' in Terminal.",
+                        content: "Sorry, I encountered an error: \(error.localizedDescription)",
                         examples: []
                     )
                     self.messages.append(errorMessage)
@@ -120,6 +114,15 @@ class ChatService: ObservableObject {
         }
     }
     
+    func callGeminiAPI(message: String) async throws -> ChatMessage {
+        // Call Gemini API directly
+        let responseText = try await geminiService.sendMessage(message)
+
+        // Parse the response
+        let (explanation, examples) = parseStructuredResponse(responseText)
+        return ChatMessage(role: "assistant", content: explanation, examples: examples)
+    }
+
     func callVertexAI(message: String) async throws -> ChatMessage {
         // Use Google Cloud Function backend with fine-tuned model
         return try await callBackendAPI(message: message)

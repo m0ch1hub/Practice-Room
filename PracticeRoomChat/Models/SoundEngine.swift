@@ -8,7 +8,7 @@ class SoundEngine: ObservableObject {
 
     @Published var currentlyPlayingNotes: Set<Int> = []
     @Published var keyboardRange: (minNote: Int, maxNote: Int) = (60, 71) // Default C4-B4
-    @Published var currentSoundFont: SoundFont = .yamaha
+    @Published var currentSoundFont: SoundFont = .rhodes
 
     private var audioEngine: AVAudioEngine
     private var sampler: AVAudioUnitSampler
@@ -17,12 +17,10 @@ class SoundEngine: ObservableObject {
     private var avSequencer: AVSequencer?
 
     enum SoundFont: String, CaseIterable {
-        case yamaha = "Yamaha C7 Piano"
         case rhodes = "jRhodes3 Electric Piano"
 
         var fileName: String {
             switch self {
-            case .yamaha: return "Yamaha_C7__Normalized_"
             case .rhodes: return "jRhodes3"
             }
         }
