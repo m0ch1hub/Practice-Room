@@ -108,8 +108,7 @@ struct FeedbackSettingsView: View {
                     Text("About")
                 }
 
-                // Developer Section (hidden by default)
-                #if DEBUG
+                // Developer Section (always visible for testing)
                 Section {
                     NavigationLink(destination: AnalyticsDebugView()) {
                         Label("Analytics Debug", systemImage: "chart.line.uptrend.xyaxis")
@@ -124,7 +123,6 @@ struct FeedbackSettingsView: View {
                 } header: {
                     Text("Developer")
                 }
-                #endif
             }
             .navigationTitle("Settings & Feedback")
             .navigationBarTitleDisplayMode(.inline)
