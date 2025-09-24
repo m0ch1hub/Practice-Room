@@ -107,6 +107,24 @@ struct FeedbackSettingsView: View {
                 } header: {
                     Text("About")
                 }
+
+                // Developer Section (hidden by default)
+                #if DEBUG
+                Section {
+                    NavigationLink(destination: AnalyticsDebugView()) {
+                        Label("Analytics Debug", systemImage: "chart.line.uptrend.xyaxis")
+                    }
+
+                    HStack {
+                        Text("Total Submissions")
+                        Spacer()
+                        Text("\(feedbackManager.totalSubmissions)")
+                            .foregroundColor(.secondary)
+                    }
+                } header: {
+                    Text("Developer")
+                }
+                #endif
             }
             .navigationTitle("Settings & Feedback")
             .navigationBarTitleDisplayMode(.inline)

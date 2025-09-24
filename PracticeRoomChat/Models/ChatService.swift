@@ -89,18 +89,38 @@ class ChatService: ObservableObject {
         let userMessage = ChatMessage(role: "user", content: message, examples: [])
         messages.append(userMessage)
         isLoading = true
-        
+
+        let startTime = Date()
+
         Task {
             do {
                 // Use Gemini API for all responses
                 let response = try await callGeminiAPI(message: message)
-                
+
+                let responseTime = Date().timeIntervalSince(startTime)
+
+                // Track the interaction
+                AnalyticsService.shared.trackInteraction(
+                    userInput: message,
+                    appResponse: response.content,
+                    responseTime: responseTime
+                )
+
                 await MainActor.run {
                     self.messages.append(response)
                     self.isLoading = false
                 }
             } catch {
                 Logger.shared.error("ChatService error: \(error.localizedDescription)")
+
+                // Track the error
+                AnalyticsService.shared.trackInteraction(
+                    userInput: message,
+                    appResponse: "",
+                    responseTime: Date().timeIntervalSince(startTime),
+                    error: error
+                )
+
                 await MainActor.run {
                     let errorMessage = ChatMessage(
                         role: "assistant",
