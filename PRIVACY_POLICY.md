@@ -1,35 +1,52 @@
 # Privacy Policy for Practice Room
 
-**Effective Date:** September 19, 2025
+**Effective Date:** December 24, 2024
 
 ## Overview
 Practice Room is a music theory education app that helps users learn musical concepts through interactive examples. We are committed to protecting your privacy and being transparent about our data practices.
 
 ## Information We Collect
-**Practice Room does not collect any personal information from users.**
 
-### No Data Collection
-- We do not collect names, email addresses, or contact information
-- We do not track your location
-- We do not access your contacts or photos
-- We do not collect device identifiers
-- We do not collect usage analytics
-- We do not use advertising identifiers
+### Anonymous Usage Analytics
+To improve the app and provide better music theory explanations, we collect limited anonymous usage data:
 
-### Local Data Only
-- All training data and musical examples are stored locally on your device
-- Your interactions with the app remain on your device
-- No data is transmitted to external servers for processing
-- The app works entirely offline after installation
+**What we collect:**
+- Questions you ask the app (first 200 characters)
+- App responses (first 200 characters)
+- Anonymous session ID (resets when you close the app)
+- Basic device information (device model, iOS version)
+- Response times and interaction metrics
+- Feedback you provide (thumbs up/down)
+
+**What we DON'T collect:**
+- Your name, email, or any personal identifiers
+- Location data
+- Contacts or photos
+- Unique device identifiers
+- Data from other apps
+- Voice recordings or microphone access
+
+### How We Use This Data
+- Identify common questions to improve responses
+- Find areas where explanations need improvement
+- Fix technical issues and improve performance
+- Understand which music theory topics are most requested
+
+### Data Storage
+- Analytics data is stored securely in Firebase Firestore
+- Session IDs are anonymous and reset each time you open the app
+- No data can be linked back to you personally
+- Local app data remains on your device
 
 ## Third-Party Services
 
 ### Firebase/Google Cloud
-The app uses Firebase for basic app functionality, but:
+The app uses Firebase for:
+- Storing anonymous usage analytics (Firestore)
+- App configuration
 - Firebase Analytics is **disabled**
-- No user data is sent to Firebase
-- Firebase is only used for app configuration
 - No crash reporting or performance monitoring is enabled
+- All data is anonymous and cannot be linked to individual users
 
 ### Audio Processing
 - All audio playback happens locally on your device
@@ -49,14 +66,14 @@ We may update this Privacy Policy from time to time. Any changes will be reflect
 
 ## Contact Information
 If you have questions about this Privacy Policy, please contact:
-[Your contact email]
+arijordanou@gmail.com
 
 ## Your Rights
-Since we don't collect any personal data:
-- There is no personal data to request access to
-- There is no personal data to correct or delete
-- There are no data portability concerns
-- There is no data to opt-out from collecting
+Since we only collect anonymous data that cannot be linked to you:
+- You can request information about our data practices
+- Anonymous analytics data cannot be linked to specific users for deletion
+- You can stop using the app at any time to cease data collection
+- Future app updates may include an opt-out option for analytics
 
 ## Compliance
 This app complies with:

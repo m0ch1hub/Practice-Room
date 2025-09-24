@@ -44,7 +44,7 @@ See our [Privacy Policy](PRIVACY_POLICY.md) for details.
 
 ## Installation
 
-Available on the App Store (coming soon).
+Available on the App Store.
 
 ## Getting Started
 
