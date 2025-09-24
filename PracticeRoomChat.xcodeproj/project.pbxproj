@@ -55,9 +55,22 @@
 		C63E2E4A2E5936E8009FECB5 /* PracticeRoomChatUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = PracticeRoomChatUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
+/* Begin PBXFileSystemSynchronizedBuildFileExceptionSet section */
+		C674F12A2E847D7F003AE5DE /* Exceptions for "PracticeRoomChat" folder in "PracticeRoomChat" target */ = {
+			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
+			membershipExceptions = (
+				Info.plist,
+			);
+			target = C63E2E2F2E5936E7009FECB5 /* PracticeRoomChat */;
+		};
+/* End PBXFileSystemSynchronizedBuildFileExceptionSet section */
+
 /* Begin PBXFileSystemSynchronizedRootGroup section */
 		C63E2E322E5936E7009FECB5 /* PracticeRoomChat */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
+			exceptions = (
+				C674F12A2E847D7F003AE5DE /* Exceptions for "PracticeRoomChat" folder in "PracticeRoomChat" target */,
+			);
 			path = PracticeRoomChat;
 			sourceTree = "<group>";
 		};
@@ -474,6 +487,7 @@
 				DEVELOPMENT_TEAM = H888J769YT;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = PracticeRoomChat/Info.plist;
 				INFOPLIST_KEY_CFBundleDisplayName = "Practice Room";
 				INFOPLIST_KEY_ITSAppUsesNonExemptEncryption = NO;
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
@@ -509,6 +523,7 @@
 				DEVELOPMENT_TEAM = H888J769YT;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = PracticeRoomChat/Info.plist;
 				INFOPLIST_KEY_CFBundleDisplayName = "Practice Room";
 				INFOPLIST_KEY_ITSAppUsesNonExemptEncryption = NO;
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;

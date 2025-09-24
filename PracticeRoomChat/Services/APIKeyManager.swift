@@ -7,9 +7,9 @@ class APIKeyManager {
 
     // Fallback for missing configuration
     private func getObfuscatedKey() -> String {
-        // Key must be provided via Info.plist
-        // This returns empty string if not configured
-        return ""
+        // TEMPORARY: Replace with your new API key
+        // TODO: Move to Info.plist or secure storage before App Store submission
+        return "YOUR_NEW_API_KEY_HERE"  // Replace this with your actual key
     }
 
     var geminiAPIKey: String {

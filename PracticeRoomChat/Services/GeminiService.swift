@@ -7,6 +7,11 @@ class GeminiService: ObservableObject {
     private let baseURL = "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent"
 
     func sendMessage(_ message: String) async throws -> String {
+        // Debug: Check if API key is loaded
+        if apiKey.isEmpty {
+            throw GeminiError.invalidURL  // Key not found
+        }
+
         guard let url = URL(string: "\(baseURL)?key=\(apiKey)") else {
             throw GeminiError.invalidURL
         }
