@@ -102,6 +102,10 @@ node_modules/
 .env.local
 .env.*.local
 
+# API Keys and Config
+Config.xcconfig
+**/Info.plist
+
 # macOS
 .DS_Store
 
