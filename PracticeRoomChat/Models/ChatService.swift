@@ -94,8 +94,23 @@ class ChatService: ObservableObject {
 
         Task {
             do {
-                // Use Gemini API for all responses
-                let response = try await callGeminiAPI(message: message)
+                var response: ChatMessage
+
+                // First check if we have an exact match in training data
+                if let trainingExample = TrainingDataManager.shared.findExactMatch(for: message),
+                   let modelContent = trainingExample.contents.first(where: { $0.role == "model" }),
+                   let responseText = modelContent.parts.first?.text {
+
+                    // Use local response - instant and free!
+                    let (explanation, examples) = parseStructuredResponse(responseText)
+                    response = ChatMessage(role: "assistant", content: explanation, examples: examples)
+                    Logger.shared.api("Using local training data for: \(message)")
+
+                } else {
+                    // No exact match - use Gemini API with context
+                    response = try await callGeminiAPIWithContext(message: message)
+                    Logger.shared.api("Using Gemini API for: \(message)")
+                }
 
                 let responseTime = Date().timeIntervalSince(startTime)
 
@@ -140,6 +155,32 @@ class ChatService: ObservableObject {
 
         // Parse the response
         let (explanation, examples) = parseStructuredResponse(responseText)
+        return ChatMessage(role: "assistant", content: explanation, examples: examples)
+    }
+
+    private func callGeminiAPIWithContext(message: String) async throws -> ChatMessage {
+        // Get similar examples from training data for context
+        let similarExamples = TrainingDataManager.shared.getSimilarExamples(for: message, limit: 2)
+
+        var enhancedMessage = message
+
+        // Add context if we found similar examples
+        if !similarExamples.isEmpty {
+            enhancedMessage = """
+            \(message)
+
+            [Context: Here are similar questions from training:
+            \(similarExamples.joined(separator: "\n\n"))
+            Please provide a response in a similar style with MIDI examples if relevant.]
+            """
+        }
+
+        // Call Gemini API with enhanced context
+        let responseText = try await geminiService.sendMessage(enhancedMessage)
+
+        // Parse the response
+        let (explanation, examples) = parseStructuredResponse(responseText)
+
         return ChatMessage(role: "assistant", content: explanation, examples: examples)
     }
 

@@ -112,6 +112,53 @@ class TrainingDataManager {
             example.metadata?.display == "main" || example.metadata == nil
         }
     }
+
+    /// Finds an exact match in training data (case-insensitive)
+    func findExactMatch(for question: String) -> TrainingExample? {
+        let normalized = question.lowercased().trimmingCharacters(in: .whitespacesAndNewlines)
+
+        return loadTrainingExamples().first { example in
+            // Check if user's question matches any training example
+            if let userContent = example.contents.first(where: { $0.role == "user" }),
+               let text = userContent.parts.first?.text {
+                let trainingQuestion = text.lowercased().trimmingCharacters(in: .whitespacesAndNewlines)
+
+                // Check for exact match or very close match
+                return trainingQuestion == normalized ||
+                       trainingQuestion == normalized.replacingOccurrences(of: "?", with: "") ||
+                       trainingQuestion.replacingOccurrences(of: "?", with: "") == normalized
+            }
+            return false
+        }
+    }
+
+    /// Gets similar examples for context (for AI)
+    func getSimilarExamples(for question: String, limit: Int = 3) -> [String] {
+        let words = question.lowercased().components(separatedBy: .whitespacesAndNewlines)
+        let examples = loadTrainingExamples()
+
+        // Score examples by keyword matches
+        let scored = examples.compactMap { example -> (example: TrainingExample, score: Int)? in
+            guard let userContent = example.contents.first(where: { $0.role == "user" }),
+                  let text = userContent.parts.first?.text else { return nil }
+
+            let score = words.reduce(0) { count, word in
+                text.lowercased().contains(word) ? count + 1 : count
+            }
+
+            return score > 0 ? (example, score) : nil
+        }
+
+        // Return top matches as context strings
+        return scored
+            .sorted { $0.score > $1.score }
+            .prefix(limit)
+            .compactMap { item in
+                guard let q = item.example.contents.first(where: { $0.role == "user" })?.parts.first?.text,
+                      let a = item.example.contents.first(where: { $0.role == "model" })?.parts.first?.text else { return nil }
+                return "Q: \(q)\nA: \(a.prefix(100))..."
+            }
+    }
 }
 
 enum TrainingDataError: LocalizedError {
