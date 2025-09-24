@@ -159,18 +159,47 @@ class ChatService: ObservableObject {
     }
 
     private func callGeminiAPIWithContext(message: String) async throws -> ChatMessage {
-        // Get similar examples from training data for context
+        // Build conversation context (last 2 exchanges = 4 messages max)
+        // Skip the last message if it's the current user message we just added
+        let messagesToConsider = messages.count > 1 && messages.last?.content == message
+            ? messages.dropLast().suffix(4)
+            : messages.suffix(4)
+
+        let recentMessages = messagesToConsider.filter { msg in
+            // Only include actual conversation, skip errors
+            !msg.content.hasPrefix("Sorry, I encountered an error")
+        }
+
+        var conversationContext = ""
+        if !recentMessages.isEmpty {
+            conversationContext = recentMessages.map { msg in
+                let role = msg.role == "user" ? "User" : "Assistant"
+                let preview = msg.content.prefix(150)
+                return "\(role): \(preview)"
+            }.joined(separator: "\n")
+        }
+
+        // Get similar examples from training data for style consistency
         let similarExamples = TrainingDataManager.shared.getSimilarExamples(for: message, limit: 2)
 
-        var enhancedMessage = message
+        // Build the enhanced message with all context
+        var enhancedMessage = ""
 
-        // Add context if we found similar examples
+        // Add conversation history if exists
+        if !conversationContext.isEmpty {
+            enhancedMessage += "[Recent conversation:\n\(conversationContext)]\n\n"
+        }
+
+        // Add the current question
+        enhancedMessage += "Current question: \(message)"
+
+        // Add training examples for style guidance
         if !similarExamples.isEmpty {
-            enhancedMessage = """
-            \(message)
+            enhancedMessage += """
 
-            [Context: Here are similar questions from training:
-            \(similarExamples.joined(separator: "\n\n"))
+
+            [Style reference from training:
+            \(similarExamples.joined(separator: "\n"))
             Please provide a response in a similar style with MIDI examples if relevant.]
             """
         }
