@@ -30,8 +30,6 @@
 		C63E2F292E5EC638009FECB5 /* FirebaseRemoteConfig in Frameworks */ = {isa = PBXBuildFile; productRef = C63E2F282E5EC638009FECB5 /* FirebaseRemoteConfig */; };
 		C63E2F2B2E5EC638009FECB5 /* FirebaseStorage in Frameworks */ = {isa = PBXBuildFile; productRef = C63E2F2A2E5EC638009FECB5 /* FirebaseStorage */; };
 		C63E2F2D2E5EC638009FECB5 /* FirebaseStorageCombine-Community in Frameworks */ = {isa = PBXBuildFile; productRef = C63E2F2C2E5EC638009FECB5 /* FirebaseStorageCombine-Community */; };
-		C6E60CE52E7B7F8600C4EE52 /* ModernLiquidGlassControlBar.swift in Sources */ = {isa = PBXBuildFile; fileRef = C6E60CE42E7B7F8600C4EE52 /* ModernLiquidGlassControlBar.swift */; };
-		C6E60CE72E7B7FDC00C4EE52 /* ModernChatView.swift in Sources */ = {isa = PBXBuildFile; fileRef = C6E60CE62E7B7FDC00C4EE52 /* ModernChatView.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -55,8 +53,6 @@
 		C63E2E302E5936E7009FECB5 /* PracticeRoomChat.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = PracticeRoomChat.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		C63E2E402E5936E8009FECB5 /* PracticeRoomChatTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = PracticeRoomChatTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		C63E2E4A2E5936E8009FECB5 /* PracticeRoomChatUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = PracticeRoomChatUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
-		C6E60CE42E7B7F8600C4EE52 /* ModernLiquidGlassControlBar.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ModernLiquidGlassControlBar.swift; sourceTree = "<group>"; };
-		C6E60CE62E7B7FDC00C4EE52 /* ModernChatView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ModernChatView.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedRootGroup section */
@@ -132,8 +128,6 @@
 				C63E2E432E5936E8009FECB5 /* PracticeRoomChatTests */,
 				C63E2E4D2E5936E8009FECB5 /* PracticeRoomChatUITests */,
 				C63E2E312E5936E7009FECB5 /* Products */,
-				C6E60CE42E7B7F8600C4EE52 /* ModernLiquidGlassControlBar.swift */,
-				C6E60CE62E7B7FDC00C4EE52 /* ModernChatView.swift */,
 			);
 			sourceTree = "<group>";
 		};
@@ -317,8 +311,6 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
-				C6E60CE72E7B7FDC00C4EE52 /* ModernChatView.swift in Sources */,
-				C6E60CE52E7B7F8600C4EE52 /* ModernLiquidGlassControlBar.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
