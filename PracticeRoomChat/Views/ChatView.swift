@@ -201,8 +201,6 @@ struct ChatMessageView: View {
     let isLatestMessage: Bool
     @StateObject private var feedbackManager = FeedbackManager.shared
     @State private var userQuestion = ""
-    @State private var showingFeedbackSheet = false
-    @State private var pendingFeedback: (messageId: UUID, question: String, answer: String, rating: FeedbackItem.Rating)?
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
@@ -227,34 +225,54 @@ struct ChatMessageView: View {
 
                     // Feedback buttons - only show for the latest message
                     if isLatestMessage {
-                        HStack(spacing: 20) {
+                        HStack(spacing: 24) {
                             Button(action: {
-                                showFeedbackSubmission(
+                                guard feedbackManager.getRating(for: message.id) == nil else { return }
+
+                                // Instant feedback to Firebase - no modal
+                                feedbackManager.rateMessage(
                                     messageId: message.id,
                                     question: userQuestion,
                                     answer: message.content,
                                     rating: .thumbsUp
                                 )
+
+                                // Haptic feedback
+                                let impactFeedback = UIImpactFeedbackGenerator(style: .medium)
+                                impactFeedback.impactOccurred()
                             }) {
                                 Image(systemName: feedbackManager.getRating(for: message.id) == .thumbsUp ? "hand.thumbsup.fill" : "hand.thumbsup")
-                                    .font(.system(size: 16))
-                                    .foregroundColor(feedbackManager.getRating(for: message.id) == .thumbsUp ? .green : .secondary)
+                                    .font(.system(size: 22))
+                                    .foregroundColor(feedbackManager.getRating(for: message.id) != nil ? .blue : .secondary)
+                                    .scaleEffect(feedbackManager.getRating(for: message.id) == .thumbsUp ? 1.1 : 1.0)
+                                    .animation(.easeInOut(duration: 0.2), value: feedbackManager.getRating(for: message.id))
                             }
                             .buttonStyle(.plain)
+                            .disabled(feedbackManager.getRating(for: message.id) != nil)
 
                             Button(action: {
-                                showFeedbackSubmission(
+                                guard feedbackManager.getRating(for: message.id) == nil else { return }
+
+                                // Instant feedback to Firebase - no modal
+                                feedbackManager.rateMessage(
                                     messageId: message.id,
                                     question: userQuestion,
                                     answer: message.content,
                                     rating: .thumbsDown
                                 )
+
+                                // Haptic feedback
+                                let impactFeedback = UIImpactFeedbackGenerator(style: .medium)
+                                impactFeedback.impactOccurred()
                             }) {
                                 Image(systemName: feedbackManager.getRating(for: message.id) == .thumbsDown ? "hand.thumbsdown.fill" : "hand.thumbsdown")
-                                    .font(.system(size: 16))
-                                    .foregroundColor(feedbackManager.getRating(for: message.id) == .thumbsDown ? .red : .secondary)
+                                    .font(.system(size: 22))
+                                    .foregroundColor(feedbackManager.getRating(for: message.id) != nil ? .blue : .secondary)
+                                    .scaleEffect(feedbackManager.getRating(for: message.id) == .thumbsDown ? 1.1 : 1.0)
+                                    .animation(.easeInOut(duration: 0.2), value: feedbackManager.getRating(for: message.id))
                             }
                             .buttonStyle(.plain)
+                            .disabled(feedbackManager.getRating(for: message.id) != nil)
                         }
                         .padding(.top, 4)
                     }
@@ -262,22 +280,6 @@ struct ChatMessageView: View {
                 .padding(.vertical, 8)
             }
         }
-        .sheet(isPresented: $showingFeedbackSheet) {
-            if let feedback = pendingFeedback {
-                FeedbackSubmissionView(
-                    messageId: feedback.messageId,
-                    question: feedback.question,
-                    answer: feedback.answer,
-                    initialRating: feedback.rating,
-                    isPresented: $showingFeedbackSheet
-                )
-            }
-        }
-    }
-
-    private func showFeedbackSubmission(messageId: UUID, question: String, answer: String, rating: FeedbackItem.Rating) {
-        pendingFeedback = (messageId, question, answer, rating)
-        showingFeedbackSheet = true
     }
 }
 

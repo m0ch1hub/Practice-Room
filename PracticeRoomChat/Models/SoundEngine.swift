@@ -26,12 +26,24 @@ class SoundEngine: ObservableObject {
         }
     }
 
+    private var isInitialized = false
+
     private init() {
         audioEngine = AVAudioEngine()
         sampler = AVAudioUnitSampler()
         reverb = AVAudioUnitReverb()
         delay = AVAudioUnitDelay()
-        
+
+        // Defer actual setup to avoid initialization conflicts
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) { [weak self] in
+            self?.initializeAudioEngine()
+        }
+    }
+
+    private func initializeAudioEngine() {
+        guard !isInitialized else { return }
+        isInitialized = true
+
         setupAudioEngine()
         loadSoundFont()
         // Use AVAudioSequencer for proper timing
@@ -42,6 +54,10 @@ class SoundEngine: ObservableObject {
     
     // Simple methods for slide view
     func playNote(midiNote: Int, duration: Double) {
+        // Ensure engine is initialized before playing
+        if !isInitialized {
+            initializeAudioEngine()
+        }
         sampler.startNote(UInt8(midiNote), withVelocity: 80, onChannel: 0)
         DispatchQueue.main.async { [weak self] in
             self?.currentlyPlayingNotes.insert(midiNote)
@@ -54,6 +70,10 @@ class SoundEngine: ObservableObject {
     }
     
     func playChord(midiNotes: [Int], duration: Double) {
+        // Ensure engine is initialized before playing
+        if !isInitialized {
+            initializeAudioEngine()
+        }
         for note in midiNotes {
             sampler.startNote(UInt8(note), withVelocity: 80, onChannel: 0)
         }
@@ -100,6 +120,10 @@ class SoundEngine: ObservableObject {
     }
     
     func switchSoundFont(to soundFont: SoundFont) {
+        // Ensure engine is initialized before switching fonts
+        if !isInitialized {
+            initializeAudioEngine()
+        }
         currentSoundFont = soundFont
         loadSoundFont()
 
@@ -151,6 +175,8 @@ class SoundEngine: ObservableObject {
     }
     
     func stopAllNotes() {
+        // Skip if not initialized yet
+        guard isInitialized else { return }
         // Stop sequencer if playing
         if #available(iOS 13.0, *) {
             avSequencer?.stop()
@@ -193,6 +219,10 @@ class SoundEngine: ObservableObject {
     
     /// Play a sequence of timed note events using AVAudioSequencer for accurate timing
     func playTimedSequence(_ events: [NoteEvent], tempo: Double = defaultTempo) {
+        // Ensure engine is initialized before playing
+        if !isInitialized {
+            initializeAudioEngine()
+        }
         Logger.shared.audio("Playing timed sequence with \(events.count) events at \(tempo) BPM")
 
         // Use AVAudioSequencer for accurate playback
@@ -314,6 +344,10 @@ class SoundEngine: ObservableObject {
     }
     /// Convenience method to play a simple chord
     func playChordAsSequence(midiNotes: [Int], durationTicks: Int = 480) {
+        // Ensure engine is initialized before playing
+        if !isInitialized {
+            initializeAudioEngine()
+        }
         let events = midiNotes.map { note in
             NoteEvent(note: note, startTick: 0, durationTicks: durationTicks)
         }

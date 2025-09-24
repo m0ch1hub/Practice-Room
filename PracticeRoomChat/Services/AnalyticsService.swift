@@ -78,6 +78,21 @@ class AnalyticsService: ObservableObject {
         db.collection("features").addDocument(data: data)
     }
 
+    // MARK: - Track Events
+    enum Event {
+        case messageFeedback(rating: String)
+        case generalFeedbackSubmitted(type: String)
+    }
+
+    func track(event: Event) {
+        switch event {
+        case .messageFeedback(let rating):
+            trackFeature(feature: "message_feedback", properties: ["rating": rating])
+        case .generalFeedbackSubmitted(let type):
+            trackFeature(feature: "general_feedback", properties: ["type": type])
+        }
+    }
+
     // MARK: - Get Analytics Summary (for you to view)
     func getRecentInteractions(limit: Int = 100) async throws -> [[String: Any]] {
         let snapshot = try await db.collection("interactions")
