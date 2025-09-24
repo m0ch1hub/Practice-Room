@@ -31,10 +31,11 @@ struct ChatView: View {
                                 .multilineTextAlignment(.center)
                         }
                         
-                        ForEach(chatService.messages) { message in
+                        ForEach(Array(chatService.messages.enumerated()), id: \.element.id) { index, message in
                             ChatMessageView(
                                 message: message,
-                                scrollProxy: proxy
+                                scrollProxy: proxy,
+                                isLatestMessage: index == chatService.messages.count - 1 && message.role == "assistant" && !chatService.isLoading
                             )
                             .id(message.id)
                         }
@@ -197,6 +198,7 @@ struct ChatView: View {
 struct ChatMessageView: View {
     let message: ChatMessage
     let scrollProxy: ScrollViewProxy
+    let isLatestMessage: Bool
     @StateObject private var feedbackManager = FeedbackManager.shared
     @State private var userQuestion = ""
     @State private var showingFeedbackSheet = false
@@ -223,37 +225,39 @@ struct ChatMessageView: View {
                         messageId: message.id
                     )
 
-                    // Feedback buttons
-                    HStack(spacing: 20) {
-                        Button(action: {
-                            showFeedbackSubmission(
-                                messageId: message.id,
-                                question: userQuestion,
-                                answer: message.content,
-                                rating: .thumbsUp
-                            )
-                        }) {
-                            Image(systemName: feedbackManager.getRating(for: message.id) == .thumbsUp ? "hand.thumbsup.fill" : "hand.thumbsup")
-                                .font(.system(size: 16))
-                                .foregroundColor(feedbackManager.getRating(for: message.id) == .thumbsUp ? .green : .secondary)
-                        }
-                        .buttonStyle(.plain)
+                    // Feedback buttons - only show for the latest message
+                    if isLatestMessage {
+                        HStack(spacing: 20) {
+                            Button(action: {
+                                showFeedbackSubmission(
+                                    messageId: message.id,
+                                    question: userQuestion,
+                                    answer: message.content,
+                                    rating: .thumbsUp
+                                )
+                            }) {
+                                Image(systemName: feedbackManager.getRating(for: message.id) == .thumbsUp ? "hand.thumbsup.fill" : "hand.thumbsup")
+                                    .font(.system(size: 16))
+                                    .foregroundColor(feedbackManager.getRating(for: message.id) == .thumbsUp ? .green : .secondary)
+                            }
+                            .buttonStyle(.plain)
 
-                        Button(action: {
-                            showFeedbackSubmission(
-                                messageId: message.id,
-                                question: userQuestion,
-                                answer: message.content,
-                                rating: .thumbsDown
-                            )
-                        }) {
-                            Image(systemName: feedbackManager.getRating(for: message.id) == .thumbsDown ? "hand.thumbsdown.fill" : "hand.thumbsdown")
-                                .font(.system(size: 16))
-                                .foregroundColor(feedbackManager.getRating(for: message.id) == .thumbsDown ? .red : .secondary)
+                            Button(action: {
+                                showFeedbackSubmission(
+                                    messageId: message.id,
+                                    question: userQuestion,
+                                    answer: message.content,
+                                    rating: .thumbsDown
+                                )
+                            }) {
+                                Image(systemName: feedbackManager.getRating(for: message.id) == .thumbsDown ? "hand.thumbsdown.fill" : "hand.thumbsdown")
+                                    .font(.system(size: 16))
+                                    .foregroundColor(feedbackManager.getRating(for: message.id) == .thumbsDown ? .red : .secondary)
+                            }
+                            .buttonStyle(.plain)
                         }
-                        .buttonStyle(.plain)
+                        .padding(.top, 4)
                     }
-                    .padding(.top, 4)
                 }
                 .padding(.vertical, 8)
             }
