@@ -5,11 +5,11 @@ class APIKeyManager {
 
     private init() {}
 
-    // Obfuscated storage - not perfect but better than plaintext
+    // Fallback for missing configuration
     private func getObfuscatedKey() -> String {
-        // Key should be provided via Info.plist or environment variable
-        // Never commit actual keys to source control
-        return ""  // Placeholder - set via Info.plist
+        // Key must be provided via Info.plist
+        // This returns empty string if not configured
+        return ""
     }
 
     var geminiAPIKey: String {
