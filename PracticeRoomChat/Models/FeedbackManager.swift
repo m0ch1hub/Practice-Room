@@ -22,6 +22,11 @@ class FeedbackManager: ObservableObject {
     @Published var messageRatings: [UUID: FeedbackItem.Rating] = [:]
 
     private let feedbackKey = "PracticeRoomFeedback"
+    private let submissionCountKey = "PracticeRoomFeedbackSubmissionCount"
+
+    var totalSubmissions: Int {
+        UserDefaults.standard.integer(forKey: submissionCountKey)
+    }
 
     private init() {
         loadFeedback()
@@ -55,7 +60,11 @@ class FeedbackManager: ObservableObject {
         // Save to UserDefaults
         saveFeedback()
 
-        Logger.shared.ui("Feedback recorded: \(rating.rawValue) for message \(messageId)")
+        // Track submission count
+        let currentCount = UserDefaults.standard.integer(forKey: submissionCountKey)
+        UserDefaults.standard.set(currentCount + 1, forKey: submissionCountKey)
+
+        Logger.shared.ui("Feedback recorded: \(rating.rawValue) for message \(messageId) (Total: \(currentCount + 1))")
     }
 
     func getRating(for messageId: UUID) -> FeedbackItem.Rating? {

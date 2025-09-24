@@ -119,6 +119,25 @@ struct FeedbackSubmissionView: View {
             comments: feedbackText
         )
 
+        // Send via email (works on real device)
+        let subject = "Practice Room Feedback: \(initialRating == .thumbsUp ? "👍" : "👎")"
+        let body = """
+        Rating: \(initialRating == .thumbsUp ? "Helpful" : "Not Helpful")
+
+        Question: \(question)
+
+        Answer: \(answer)
+
+        User Comments: \(feedbackText.isEmpty ? "None" : feedbackText)
+
+        Time: \(Date().formatted())
+        """
+
+        // Create mailto URL - this opens Mail app on real device
+        if let url = URL(string: "mailto:?subject=\(subject.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? "")&body=\(body.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? "")") {
+            UIApplication.shared.open(url)
+        }
+
         // Show thank you and dismiss
         showingThankYouAlert = true
     }
