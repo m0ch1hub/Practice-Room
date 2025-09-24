@@ -155,8 +155,8 @@ class ChatService: ObservableObject {
             Logger.shared.api("No user found, signing in anonymously...")
             try await Auth.auth().signInAnonymously()
             Logger.shared.api("Anonymous sign in successful")
-        } else {
-            Logger.shared.api("User already authenticated: \(Auth.auth().currentUser!.uid)")
+        } else if let uid = Auth.auth().currentUser?.uid {
+            Logger.shared.api("User already authenticated: \(uid)")
         }
         
         // Get ID token for authentication

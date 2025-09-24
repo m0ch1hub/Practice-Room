@@ -30,20 +30,13 @@ class GeminiService: ObservableObject {
         do {
             let (data, response) = try await URLSession.shared.data(for: request)
 
-            // Log response for debugging
-            if let jsonString = String(data: data, encoding: .utf8) {
-                print("Gemini Response: \(jsonString)")
-            }
+            // Response received successfully
 
             guard let httpResponse = response as? HTTPURLResponse else {
                 throw GeminiError.invalidResponse
             }
 
             if httpResponse.statusCode != 200 {
-                print("HTTP Error: \(httpResponse.statusCode)")
-                if let errorString = String(data: data, encoding: .utf8) {
-                    print("Error details: \(errorString)")
-                }
                 throw GeminiError.invalidResponse
             }
 
@@ -66,12 +59,10 @@ class GeminiService: ObservableObject {
                 }
 
                 return text
-            } catch DecodingError.keyNotFound(let key, let context) {
-                print("Decoding error - missing key: \(key), context: \(context)")
+            } catch DecodingError.keyNotFound(_, _) {
                 throw GeminiError.invalidResponse
             }
         } catch {
-            print("Gemini API Error: \(error)")
             throw error
         }
     }

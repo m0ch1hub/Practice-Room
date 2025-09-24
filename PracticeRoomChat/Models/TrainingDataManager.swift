@@ -37,7 +37,7 @@ class TrainingDataManager {
         let simpleURL = URL(fileURLWithPath: simpleProjectPath)
         
         if FileManager.default.fileExists(atPath: simpleProjectPath) {
-            print("Loading simple training data from development path: \(simpleProjectPath)")
+            // Loading from development path
             return simpleURL
         }
         
@@ -46,7 +46,7 @@ class TrainingDataManager {
         let developmentURL = URL(fileURLWithPath: projectPath)
         
         if FileManager.default.fileExists(atPath: projectPath) {
-            print("Loading training data from development path: \(projectPath)")
+            // Loading from development path
             return developmentURL
         }
         #endif
@@ -54,23 +54,23 @@ class TrainingDataManager {
         // Production path - load from bundle
         // Try simple_training_data first
         if let bundleURL = Bundle.main.url(forResource: "simple_training_data", withExtension: "jsonl") {
-            print("Loading simple training data from bundle: simple_training_data.jsonl")
+            // Loading from bundle
             return bundleURL
         }
 
         // Try with folder structure
         if let bundleURL = Bundle.main.url(forResource: "Training Data/simple_training_data", withExtension: "jsonl") {
-            print("Loading training data from bundle with folder: Training Data/simple_training_data.jsonl")
+            // Loading from bundle folder
             return bundleURL
         }
 
         // Fall back to original training_data
         if let bundleURL = Bundle.main.url(forResource: "training_data", withExtension: "jsonl") {
-            print("Loading training data from bundle root: training_data.jsonl")
+            // Loading from bundle root
             return bundleURL
         }
         
-        print("Training data file not found in any location")
+        // Training data file not found
         return nil
     }
     
@@ -98,7 +98,7 @@ class TrainingDataManager {
                 }
             }
         } catch {
-            print("Error loading training examples: \(error)")
+            // Error loading training examples
         }
 
         return examples
